@@ -7,6 +7,9 @@ import secrets
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import fitz
+
+from groundling.answer_html import build_answer_html
 from groundling.extract import extract_words
 from groundling.markers import parse_markers, resolve_marker_to_spans
 from groundling.render import render_cite_pdf, render_cite_web
@@ -221,5 +224,38 @@ def run_render(
     }
     (run_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
     (run_dir / "answer.md").write_text(out, encoding="utf-8")
+
+    # Also emit answer.html — browser view with hover preview + side
+    # pane. Build image_dims from the cite records we already validated.
+    image_dims: dict[int, tuple[str, int, int]] = {}
+    page_dims_cache: dict[tuple[Path, int], tuple[int, int]] = {}
+    for rec in cite_records:
+        if rec["kind"] != "pdf":
+            continue
+        cid = rec["cite_id"]
+        page = rec["spans"][0]["page"]
+        # Determine which N.png this cite uses (may be a dedupe owner's).
+        key = (rec["pdf_path"], page)
+        owner = rendered_pages.get(key, cid)
+        image_filename = f"{owner}.png"
+        # Cache page dims by (pdf_path, page).
+        if key not in page_dims_cache:
+            with fitz.open(rec["pdf_path"]) as doc:
+                p = doc.load_page(page - 1)
+                page_dims_cache[key] = (
+                    int(p.rect.width * 2.0),
+                    int(p.rect.height * 2.0),
+                )
+        w_px, h_px = page_dims_cache[key]
+        image_dims[cid] = (image_filename, w_px, h_px)
+
+    answer_html = build_answer_html(
+        answer_md=out,
+        cite_records=cite_records,
+        image_dims=image_dims,
+        run_dir_name=run_dir.name,
+        scale=2.0,
+    )
+    (run_dir / "answer.html").write_text(answer_html, encoding="utf-8")
 
     return RenderResult(run_dir=run_dir, markdown=out, counters=counters)

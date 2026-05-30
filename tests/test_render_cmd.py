@@ -180,3 +180,42 @@ def test_cli_render_reads_answer_from_stdin(tmp_path, text_pdf):
     )
     assert result.exit_code == 0, result.stdout + result.stderr
     assert "[1]" in result.stdout
+
+
+def test_run_render_writes_answer_html_with_cite_decoration(tmp_path, text_pdf):
+    corpus, prep_dir = _seeded_prep(tmp_path, text_pdf)
+    chunk_id, quote = _chunk_id_from_prep(prep_dir, "sample")
+    answer = (
+        f'See [the opening](chunk://sample/{chunk_id} "{quote}") here.'
+    )
+    result = run_render(
+        prep_dir=prep_dir, answer_md=answer, state_dir=None,
+        web_base="http://localhost:8123",
+    )
+    html_path = result.run_dir / "answer.html"
+    assert html_path.exists()
+    html = html_path.read_text()
+    # Page shell.
+    assert "<!doctype html>" in html or "<!DOCTYPE html>" in html
+    assert '<aside class="cite-pane"' in html
+    # Cite decoration arrived through the full pipeline.
+    assert 'class="cite"' in html
+    assert 'data-cite-id="1"' in html
+    assert 'data-kind="pdf"' in html
+    assert 'data-img="cites/1.png"' in html
+    # Mobile fall-through media query.
+    assert "(hover: hover)" in html
+
+
+def test_run_render_answer_html_handles_zero_cites(tmp_path, text_pdf):
+    """No cites → answer.html still exists, just plain prose."""
+    _, prep_dir = _seeded_prep(tmp_path, text_pdf)
+    result = run_render(
+        prep_dir=prep_dir, answer_md="no cites here.", state_dir=None,
+    )
+    html_path = result.run_dir / "answer.html"
+    assert html_path.exists()
+    html = html_path.read_text()
+    assert 'class="cite"' not in html
+    # Page shell still present.
+    assert '<aside class="cite-pane"' in html
