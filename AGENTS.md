@@ -100,6 +100,12 @@ surfacing the counts if any cites were dropped.
 Exit code 5 means zero markers survived validation — your answer is
 ungrounded. Consider rephrasing or asking the user.
 
+For browser viewing, the run dir also contains `answer.html` — a
+self-contained page with cite highlights, hover preview of the
+cited PDF region, and a click-opens-side-pane iframe of the full
+cite page. Serve it via `groundling serve` and open
+`http://127.0.0.1:8123/<run_id>/answer.html`.
+
 If the user's terminal doesn't make `file://` links clickable, pass
 `--web-base http://localhost:8123` to `render` and start `groundling
 serve` in a second shell — that serves the state dir over HTTP so
