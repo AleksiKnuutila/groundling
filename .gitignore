@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+dist/
+build/
+*.egg-info/
+
+# uv
+uv.lock
+
+# pytest
+.pytest_cache/
+
+# Run artifacts (per-user, per-corpus)
+qa-runs/
+.groundling-cache/
+
+# Local env
+.env
+.env.local
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
