@@ -18,7 +18,9 @@ from markdown_it import MarkdownIt
 _TEMPLATE_DIR = Path(__file__).parent / "templates"
 _env = Environment(
     loader=FileSystemLoader(str(_TEMPLATE_DIR)),
-    autoescape=select_autoescape(["html"]),
+    autoescape=select_autoescape(
+        enabled_extensions=("html", "htm", "j2"),
+    ),
 )
 
 
@@ -78,7 +80,6 @@ def decorate_answer_html(
     cite_records: list[dict],
     image_dims: dict[int, tuple[str, int, int]],
     run_dir_name: str,
-    web_base: str,
     scale: float,
 ) -> str:
     """Render answer_md to HTML and decorate cite anchors with
@@ -139,7 +140,6 @@ def build_answer_html(
     cite_records: list[dict],
     image_dims: dict[int, tuple[str, int, int]],
     run_dir_name: str,
-    web_base: str,
     scale: float = 2.0,
 ) -> str:
     """Build the full answer.html page from the rewritten markdown.
@@ -151,7 +151,6 @@ def build_answer_html(
         cite_records=cite_records,
         image_dims=image_dims,
         run_dir_name=run_dir_name,
-        web_base=web_base,
         scale=scale,
     )
     template = _env.get_template("answer.html.j2")

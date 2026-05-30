@@ -7,7 +7,7 @@
 <style>
   body { font: 16px/1.55 system-ui, sans-serif; color: #222; margin: 0; display: flex; }
   main.answer { flex: 1 1 auto; padding: 32px 40px; max-width: 760px; transition: flex-basis 0.2s, max-width 0.2s; }
-  body.pane-open main.answer { flex: 0 0 60%; max-width: none; }
+  body.pane-open main.answer { margin-right: 40%; max-width: none; }
   body.pane-open aside.cite-pane { display: flex; }
 
   main.answer h1, main.answer h2, main.answer h3 { line-height: 1.25; }
@@ -64,13 +64,13 @@
 
   aside.cite-pane {
     display: none;
-    flex: 0 0 40%;
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 40%;
     border-left: 1px solid #ddd;
     background: #fafafa;
-    position: relative;
-    height: 100vh;
-    position: sticky;
-    top: 0;
   }
   aside.cite-pane iframe {
     width: 100%; height: 100%; border: 0;
@@ -88,7 +88,7 @@
     a.cite .preview { display: none !important; }
   }
   @media (max-width: 700px) {
-    body.pane-open main.answer { flex: 1 1 auto; }
+    body.pane-open main.answer { margin-right: 0; }
     body.pane-open aside.cite-pane { display: none; }
   }
 </style>

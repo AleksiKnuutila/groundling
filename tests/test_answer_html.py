@@ -85,7 +85,6 @@ def test_decorate_answer_html_wrap_cite_decorated():
         cite_records=cite_records,
         image_dims=image_dims,
         run_dir_name="run-x",
-        web_base="http://localhost:8123",
         scale=2.0,
     )
     # The anchor exists with class="cite" and data attributes.
@@ -118,7 +117,6 @@ def test_decorate_answer_html_point_marker_decorated():
         cite_records=cite_records,
         image_dims=image_dims,
         run_dir_name="run-x",
-        web_base="http://localhost:8123",
         scale=2.0,
     )
     # The reference-style [1] becomes an <a> via markdown-it; we should
@@ -136,7 +134,7 @@ def test_decorate_answer_html_web_cite_no_image_attrs():
         answer_md=answer_md, cite_records=cite_records,
         image_dims={},  # web cites have no image
         run_dir_name="run-x",
-        web_base="http://localhost:8123", scale=2.0,
+        scale=2.0,
     )
     assert 'data-kind="web"' in html
     assert 'data-img=' not in html
@@ -149,14 +147,14 @@ def test_decorate_answer_html_non_cite_links_untouched():
         answer_md=answer_md, cite_records=[],
         image_dims={},
         run_dir_name="run-x",
-        web_base="http://localhost:8123", scale=2.0,
+        scale=2.0,
     )
     assert 'class="cite"' not in html
     assert 'href="https://example.com/docs"' in html
 
 
 def test_decorate_answer_html_file_url_base():
-    """Default web_base is file://. Cite anchors come out as
+    """When the run_render base is file://, cite anchors come out as
     file://<abs>/run-x/cites/1.html. The matcher should handle both
     schemes."""
     answer_md = (
@@ -171,7 +169,7 @@ def test_decorate_answer_html_file_url_base():
         answer_md=answer_md, cite_records=cite_records,
         image_dims=image_dims,
         run_dir_name="run-x",
-        web_base="file:///tmp/qa-runs", scale=2.0,
+        scale=2.0,
     )
     assert 'class="cite"' in html
     assert 'data-cite-id="1"' in html
@@ -194,7 +192,6 @@ def test_build_answer_html_emits_full_page():
         cite_records=cite_records,
         image_dims=image_dims,
         run_dir_name="run-x",
-        web_base="http://localhost:8123",
         scale=2.0,
     )
     # Doctype + page shell.
