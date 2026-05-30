@@ -19,8 +19,10 @@ and click-opens-side-pane source viewing.
 
 ## Install
 
-    pipx install groundling
-    # or, for local development:
+    pipx install git+https://github.com/AleksiKnuutila/groundling.git
+    # or, if you use uv:
+    uv tool install git+https://github.com/AleksiKnuutila/groundling.git
+    # or, from a local clone:
     pipx install /path/to/groundling
 
 ## Quick start
