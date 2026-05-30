@@ -38,3 +38,22 @@ def test_chunk_pdf_text_concatenates_words_with_spaces(text_pdf):
             w["content"] for w in words[c["word_idx_start"]:c["word_idx_end"]]
         )
         assert c["text"] == expected
+
+
+def test_chunk_pdf_emits_table_cells(table_pdf):
+    chunks = chunk_pdf(table_pdf, detect_tables=True)
+    cell_ids = [c["chunk_id"] for c in chunks if "t" in c["chunk_id"]]
+    # At least the four cells of the 2x2 table.
+    expected = {"p1:t0r0c0", "p1:t0r0c1", "p1:t0r1c0", "p1:t0r1c1"}
+    assert expected.issubset(set(cell_ids))
+
+
+def test_chunk_pdf_cell_text_matches_cell_content(table_pdf):
+    chunks = {c["chunk_id"]: c for c in chunk_pdf(table_pdf, detect_tables=True)}
+    assert "Header A" in chunks["p1:t0r0c0"]["text"]
+    assert "Value 2" in chunks["p1:t0r1c1"]["text"]
+
+
+def test_detect_tables_false_skips_cells(table_pdf):
+    chunks = chunk_pdf(table_pdf, detect_tables=False)
+    assert not any("t" in c["chunk_id"] for c in chunks)

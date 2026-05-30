@@ -24,7 +24,13 @@ def _bbox_contains_point(bbox: list[float], x: float, y: float) -> bool:
 
 def chunk_pdf(pdf_path: Path, *, detect_tables: bool = True) -> list[dict]:
     """Return per-PDF chunks: [{chunk_id, page, bbox, word_idx_start,
-    word_idx_end, text}, ...] sorted by (page, reading order)."""
+    word_idx_end, text}, ...] sorted by (page, reading order).
+
+    When `detect_tables` is True, PyMuPDF's `page.find_tables()` is run
+    first; words falling inside detected table cells become
+    `p<page>:t<i>r<r>c<c>` chunks. Remaining words then fall through to
+    the prose `p<page>:b<n>` block pass.
+    """
     words = extract_words(pdf_path, cache_dir=None)
     # word_idx_by_page: page -> list of (idx, word) preserving extract order
     word_idx_by_page: dict[int, list[tuple[int, dict]]] = {}
@@ -38,16 +44,54 @@ def chunk_pdf(pdf_path: Path, *, detect_tables: bool = True) -> list[dict]:
             page_words = word_idx_by_page.get(page_num, [])
             if not page_words:
                 continue
-            # PyMuPDF blocks: [(x0, y0, x1, y1, text, block_no, block_type)]
+
+            # Step 1: detect tables and consume their cells first.
+            consumed_word_indices: set[int] = set()
+            if detect_tables:
+                try:
+                    tables = page.find_tables()
+                except Exception:
+                    tables = []
+                for t_idx, table in enumerate(getattr(tables, "tables", []) or list(tables)):
+                    for r_idx, row in enumerate(table.rows):
+                        for c_idx, cell in enumerate(row.cells):
+                            if cell is None:
+                                continue
+                            cell_bbox = list(cell)  # (x0, y0, x1, y1)
+                            cell_words: list[tuple[int, dict]] = []
+                            for idx, w in page_words:
+                                if idx in consumed_word_indices:
+                                    continue
+                                wx0, wy0, wx1, wy1 = w["bbox"]
+                                cx, cy = (wx0 + wx1) / 2, (wy0 + wy1) / 2
+                                if _bbox_contains_point(cell_bbox, cx, cy):
+                                    cell_words.append((idx, w))
+                            if not cell_words:
+                                continue
+                            for idx, _ in cell_words:
+                                consumed_word_indices.add(idx)
+                            start = cell_words[0][0]
+                            end = cell_words[-1][0] + 1
+                            text = " ".join(w["content"] for _, w in cell_words)
+                            chunks.append({
+                                "chunk_id": f"p{page_num}:t{t_idx}r{r_idx}c{c_idx}",
+                                "page": page_num,
+                                "bbox": cell_bbox,
+                                "word_idx_start": start,
+                                "word_idx_end": end,
+                                "text": text,
+                            })
+
+            # Step 2: remaining words → prose blocks.
             blocks = page.get_text("blocks")
             for b_idx, block in enumerate(blocks):
                 bx0, by0, bx1, by1 = block[0], block[1], block[2], block[3]
-                # Words whose bbox center falls inside this block.
                 block_words: list[tuple[int, dict]] = []
                 for idx, w in page_words:
+                    if idx in consumed_word_indices:
+                        continue
                     wx0, wy0, wx1, wy1 = w["bbox"]
-                    cx = (wx0 + wx1) / 2
-                    cy = (wy0 + wy1) / 2
+                    cx, cy = (wx0 + wx1) / 2, (wy0 + wy1) / 2
                     if _bbox_contains_point([bx0, by0, bx1, by1], cx, cy):
                         block_words.append((idx, w))
                 if not block_words:
@@ -63,5 +107,6 @@ def chunk_pdf(pdf_path: Path, *, detect_tables: bool = True) -> list[dict]:
                     "word_idx_end": end,
                     "text": text,
                 })
+
     chunks.sort(key=lambda c: (c["page"], c["word_idx_start"]))
     return chunks
