@@ -12,12 +12,23 @@ Raises NoTextError if the PDF has no extractable text (likely a scan).
 """
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
 import fitz
 
 from groundling.errors import NoTextError
+
+
+def _cache_path(cache_dir: Path, pdf_path: Path) -> Path:
+    """Cache filename = <stem>-<8 hex of resolved-path hash>.json.
+
+    Includes a path hash so two PDFs with the same stem in different
+    directories don't share a cache slot.
+    """
+    digest = hashlib.sha1(str(pdf_path.resolve()).encode("utf-8")).hexdigest()[:8]
+    return cache_dir / f"{pdf_path.stem}-{digest}.json"
 
 
 def _read_cache(cache_path: Path, pdf_mtime_ns: int) -> list[dict] | None:
@@ -37,7 +48,7 @@ def _write_cache(cache_path: Path, pdf_mtime_ns: int, words: list[dict]) -> None
     cache_path.write_text(json.dumps({
         "mtime_ns": pdf_mtime_ns,
         "words": words,
-    }))
+    }, ensure_ascii=False))
 
 
 def _raw_extract(pdf_path: Path) -> list[dict]:
@@ -64,7 +75,7 @@ def _raw_extract(pdf_path: Path) -> list[dict]:
 def extract_words(pdf_path: Path, *, cache_dir: Path | None) -> list[dict]:
     pdf_mtime_ns = pdf_path.stat().st_mtime_ns
     if cache_dir is not None:
-        cache_path = cache_dir / f"{pdf_path.stem}.json"
+        cache_path = _cache_path(cache_dir, pdf_path)
         cached = _read_cache(cache_path, pdf_mtime_ns)
         if cached is not None:
             return cached
