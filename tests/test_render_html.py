@@ -79,6 +79,43 @@ def test_render_cite_pdf_writes_image_and_bbox_divs(text_pdf, tmp_path):
     assert re.search(r"height:\s*30(?:\.0)?px", html)
 
 
+def test_render_cite_pdf_highlights_share_positioning_context_with_image(text_pdf, tmp_path):
+    """Highlights' (top, left) are PDF-derived pixel offsets relative to
+    the image's top-left. They must therefore live inside an element
+    whose padding-box top-left coincides with the image's top-left —
+    i.e. inside `.page` (no padding/border), NOT directly under
+    `.page-wrap` which has `padding: 20px`. Regression: ~10pt offset
+    bug where highlights appeared one line too high."""
+    out_html = tmp_path / "1.html"
+    image_path = tmp_path / "1.png"
+    render_cite_pdf(
+        pdf_path=text_pdf,
+        out_html=out_html,
+        image_path=image_path,
+        cite_id=1, total=1,
+        question="?", cited_text="?",
+        spans=[{"page": 1, "bbox": [10, 10, 20, 20]}],
+        prev_id=None, next_id=None, scale=2.0,
+    )
+    html = out_html.read_text()
+    # The .page container must exist and have position: relative.
+    assert ".page {" in html
+    assert "position: relative" in html.split(".page {", 1)[1].split("}", 1)[0]
+    # The img and the highlight must both sit inside .page (so the
+    # highlight's absolute coords are measured from the image origin).
+    page_block = html.split('<div class="page">', 1)[1].split("</div>", 2)
+    # page_block[0] is content up to first </div> — but we have <img>
+    # then </div> (closing .page). The highlight should appear before
+    # the page's closing </div>.
+    inside_page = html.split('<div class="page">', 1)[1].split("</div>\n  </div>", 1)[0]
+    assert "<img" in inside_page
+    assert 'class="highlight"' in inside_page
+    # And .page-wrap must NOT itself be position: relative (otherwise
+    # the highlight would resolve against its padding box).
+    page_wrap_rules = html.split(".page-wrap {", 1)[1].split("}", 1)[0]
+    assert "position: relative" not in page_wrap_rules
+
+
 def test_render_cite_pdf_multiple_spans_emits_multiple_highlights(text_pdf, tmp_path):
     spans = [
         {"page": 1, "bbox": [10, 10, 20, 20]},

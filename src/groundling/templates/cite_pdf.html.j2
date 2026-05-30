@@ -14,8 +14,9 @@
   .nav { margin-top: 24px; display: flex; gap: 8px; }
   .nav a { padding: 4px 10px; border: 1px solid #ccc; text-decoration: none; color: #444; background: #fff; border-radius: 3px; font-size: 13px; }
   .nav a:hover { background: #eee; }
-  .page-wrap { position: relative; padding: 20px; }
-  .page-wrap img { display: block; box-shadow: 0 1px 6px rgba(0,0,0,0.15); }
+  .page-wrap { padding: 20px; }
+  .page { position: relative; display: inline-block; line-height: 0; }
+  .page img { display: block; box-shadow: 0 1px 6px rgba(0,0,0,0.15); }
   .highlight { position: absolute; background: rgba(255, 235, 0, 0.35); border: 1px solid rgba(200, 160, 0, 0.6); pointer-events: none; }
 </style>
 </head>
@@ -33,10 +34,12 @@
   </div>
 </aside>
 <div class="page-wrap">
-  <img src="{{ image_filename }}" width="{{ image_w }}" height="{{ image_h }}">
-  {% for h in highlights %}
-  <div class="highlight" style="left: {{ h.left }}px; top: {{ h.top }}px; width: {{ h.width }}px; height: {{ h.height }}px;"></div>
-  {% endfor %}
+  <div class="page">
+    <img src="{{ image_filename }}" width="{{ image_w }}" height="{{ image_h }}">
+    {% for h in highlights %}
+    <div class="highlight" style="left: {{ h.left }}px; top: {{ h.top }}px; width: {{ h.width }}px; height: {{ h.height }}px;"></div>
+    {% endfor %}
+  </div>
 </div>
 </body>
 </html>
