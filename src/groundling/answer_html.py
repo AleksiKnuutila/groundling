@@ -7,6 +7,11 @@ iframe of the full cite page.
 """
 from __future__ import annotations
 
+import html
+import re
+
+from markdown_it import MarkdownIt
+
 
 def build_cite_attrs(
     cite_record: dict,
@@ -45,11 +50,6 @@ def build_cite_attrs(
     return attrs
 
 
-import re
-
-from markdown_it import MarkdownIt
-
-
 def _cite_id_from_href(
     href: str,
     *,
@@ -84,7 +84,7 @@ def decorate_answer_html(
     md = MarkdownIt("commonmark").enable("table")
     # Allow file:// URLs so local-file cite hrefs survive rendering.
     md.validateLink = lambda url: True
-    html = md.render(answer_md)
+    rendered_html = md.render(answer_md)
 
     # Walk anchors via regex. The HTML markdown-it emits is well-formed
     # enough that a single non-greedy <a …>…</a> regex catches every
@@ -113,10 +113,12 @@ def decorate_answer_html(
             image_h_px=image_h_px,
             scale=scale,
         )
-        attrs_str = " ".join(f'{k}="{v}"' for k, v in attrs.items())
+        attrs_str = " ".join(
+            f'{k}="{html.escape(v, quote=True)}"' for k, v in attrs.items()
+        )
         return (
             f'<a class="cite" href="{href}"{rest} {attrs_str}>'
             f'{inner}<span class="preview"></span></a>'
         )
 
-    return anchor_re.sub(_replace, html)
+    return anchor_re.sub(_replace, rendered_html)
