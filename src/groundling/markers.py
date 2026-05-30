@@ -21,6 +21,12 @@ class Marker:
     pdf_stem: str | None = None
     chunk_id: str | None = None
     url: str | None = None
+    # "point" markers are dropped/replaced with [N] at render time. "wrap"
+    # markers came from a wrapping markdown link `[claim](chunk://...
+    # "quote")` — the agent committed to the claim_text as the cite scope;
+    # at render time we keep the link text and rewrite just the URL.
+    wrap_kind: str = "point"
+    claim_text: str | None = None
 
 
 # Compiled regexes. We match the brackets, then parse internals manually
@@ -33,6 +39,23 @@ _URL_INNER_RE = re.compile(
     r"^url=\"(?P<url>[^\"]+)\"\s+quote=\"(?P<quote>(?:[^\"\\]|\\.)*)\"$"
 )
 
+# Wrapping markdown-link cite: [claim text](chunk://stem/chunk_id "quote")
+# The agent commits to the claim_text as the scope of the citation,
+# instead of the conventional "preceding sentence" of point markers.
+_WRAP_PDF_RE = re.compile(
+    r'\[(?P<claim>[^\]\n]+)\]'
+    r'\(chunk://(?P<stem>[^/\s]+)/(?P<chunk_id>[^\s)]+)'
+    r'\s+"(?P<quote>(?:[^"\\]|\\.)*)"\)'
+)
+# Wrapping web cite: [claim text](web://https://full-url "quote")
+# Web URL goes in the path after web:// so it doesn't collide with
+# ordinary `[text](https://...)` markdown links that aren't cites.
+_WRAP_WEB_RE = re.compile(
+    r'\[(?P<claim>[^\]\n]+)\]'
+    r'\(web://(?P<url>https?://[^\s)]+)'
+    r'\s+"(?P<quote>(?:[^"\\]|\\.)*)"\)'
+)
+
 
 def _unescape(s: str) -> str:
     return s.replace(r'\"', '"').replace(r"\\", "\\")
@@ -40,8 +63,43 @@ def _unescape(s: str) -> str:
 
 def parse_markers(markdown: str) -> list[Marker]:
     out: list[Marker] = []
+    claimed: list[tuple[int, int]] = []  # spans the wrap pass took
+
+    # First pass: wrapping markdown-link cites (more specific, eat first).
+    for mm in _WRAP_PDF_RE.finditer(markdown):
+        out.append(Marker(
+            kind="pdf",
+            quote=_unescape(mm.group("quote")),
+            span_start=mm.start(),
+            span_end=mm.end(),
+            pdf_stem=mm.group("stem"),
+            chunk_id=mm.group("chunk_id"),
+            wrap_kind="wrap",
+            claim_text=mm.group("claim"),
+        ))
+        claimed.append((mm.start(), mm.end()))
+    for mm in _WRAP_WEB_RE.finditer(markdown):
+        out.append(Marker(
+            kind="web",
+            quote=_unescape(mm.group("quote")),
+            span_start=mm.start(),
+            span_end=mm.end(),
+            url=mm.group("url"),
+            wrap_kind="wrap",
+            claim_text=mm.group("claim"),
+        ))
+        claimed.append((mm.start(), mm.end()))
+
+    def _inside_claimed(start: int, end: int) -> bool:
+        return any(s <= start and end <= e for s, e in claimed)
+
+    # Second pass: legacy point markers. Skip any that fall inside the
+    # link-text of a wrap marker (otherwise [chunk=...] hidden in a
+    # claim string would double-cite).
     for m in _MARKER_RE.finditer(markdown):
-        inner = markdown[m.start() + 1 : m.end() - 1]  # strip [ ]
+        if _inside_claimed(m.start(), m.end()):
+            continue
+        inner = markdown[m.start() + 1 : m.end() - 1]
         if inner.startswith("chunk="):
             mm = _CHUNK_INNER_RE.match(inner)
             if not mm:
@@ -65,6 +123,7 @@ def parse_markers(markdown: str) -> list[Marker]:
                 span_end=m.end(),
                 url=mm.group("url"),
             ))
+    out.sort(key=lambda mk: mk.span_start)
     return out
 
 

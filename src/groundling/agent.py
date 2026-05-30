@@ -49,19 +49,28 @@ with one ID per cell.
 Answer this question, citing the chunks you drew from:
 {question}
 
-Marker contract (mandatory; deviating breaks citation validation):
+Marker contract (mandatory; deviating breaks citation validation).
+Two shapes — **prefer wrapping when you can name the claim**.
 
-When citing a chunk in this PDF:
-  [chunk=<stem>:<chunk_id> quote="exact verbatim substring of the chunk"]
+**Wrapping (preferred):** the citation wraps the claim it supports.
+
+  [<claim text>](chunk://<stem>/<chunk_id> "exact verbatim quote")
+  [<claim text>](web://https://full-url "exact verbatim quote")
+
+The link text is the precise span of your answer that this citation
+grounds — usually a sentence fragment naming the figure or claim.
+The quote in the title attribute MUST be a verbatim substring of the
+cited chunk / fetched page.
+
+**Point (footnote):** when the claim is the whole preceding sentence
+and pulling out a fragment would feel artificial.
+
+  [chunk=<stem>:<chunk_id> quote="exact verbatim quote"]
+  [url="https://full-url" quote="exact verbatim quote"]
 
 The chunk_id is the bracketed label as it appears in the linearized
-text (the part after `<stem>:`). The quote MUST be a verbatim substring
-of that chunk's text — not paraphrased.
-
-When citing a web source (via your WebSearch / WebFetch tools):
-  [url="https://full-url" quote="exact verbatim sentence from page"]
-
-The quote MUST be a verbatim substring of the fetched page.
+text (the part after `<stem>:`). The quote MUST be a verbatim
+substring of that chunk's text — not paraphrased.
 
 Write your per-document answer as markdown. Embed markers inline next
 to the claims they support. If the document doesn't answer the

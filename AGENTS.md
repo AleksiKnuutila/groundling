@@ -58,20 +58,34 @@ If `recommend == "subagent_fanout"`:
 
 ### Marker contract
 
-When you cite a PDF chunk:
+Two shapes — **prefer the wrapping form when you can name the claim
+the citation supports**.
 
-    [chunk=<pdf-stem>:<chunk_id> quote="exact verbatim substring of the chunk"]
+**Wrapping (preferred for specific claims):**
+
+    [<claim text>](chunk://<pdf-stem>/<chunk_id> "exact verbatim quote")
+    [<claim text>](web://https://full-url "exact verbatim quote")
+
+The claim text is the span the citation is grounding — write it as
+the precise sentence-fragment that the cited quote supports. The link
+text becomes the citation's scope on the page. At render time the
+URL is rewritten to the local cite HTML; the link text and the
+quote (in the title attribute) are preserved verbatim.
+
+**Point (footnote, when a claim spans many figures):**
+
+    [chunk=<pdf-stem>:<chunk_id> quote="exact verbatim quote"]
+    [url="https://full-url" quote="exact verbatim quote"]
+
+Becomes `[N]` at render time, with a reference appendix at the bottom.
+Read by convention as covering the preceding sentence — vaguer scope,
+useful when the claim is the whole sentence and pulling out a fragment
+would be artificial.
 
 The chunk_id is the bracketed label in the linearized text (e.g.
-`p2:b01`, `p2:t0r1c1`). The quote MUST be a verbatim substring of that
-chunk's text — not paraphrased. Render-time validation drops cites where
-the chunk is unknown or the quote is not found.
-
-When you cite a web source (via your WebSearch / WebFetch tools):
-
-    [url="https://full-url" quote="exact verbatim sentence from page"]
-
-The quote MUST be a verbatim substring of the fetched page.
+`p2:b01`, `p2:t0r1c1`). The quote MUST be a verbatim substring of
+that chunk's text. Render-time validation drops cites where the chunk
+is unknown or the quote is not found.
 
 ### Step 3: render
 

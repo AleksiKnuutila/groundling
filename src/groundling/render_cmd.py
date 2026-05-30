@@ -154,12 +154,15 @@ def run_render(
                 cited_text=rec["marker"].quote,
             )
 
-    # Rewrite the answer markdown: replace each surviving marker with
-    # [N]; drop invalid markers entirely. Walk right-to-left so offsets
-    # stay valid.
+    # Rewrite the answer markdown. Point markers get replaced with
+    # `[N]` reference-style footnotes. Wrap markers get their URL
+    # rewritten — link text and title attribute (the quote) survive
+    # unchanged so the agent's committed claim_text stays visible.
+    # Walk right-to-left so offsets stay valid.
+    markers_by_id = {id(r["marker"]): r["marker"] for r in cite_records}
     survivors = {id(r["marker"]): r["cite_id"] for r in cite_records}
     out = answer_md
-    surviving_markers = {id(r["marker"]) for r in cite_records}
+    surviving_markers = set(markers_by_id)
     all_marker_spans = sorted(
         ((m.span_start, m.span_end, id(m)) for m in markers),
         key=lambda t: -t[0],
@@ -167,15 +170,28 @@ def run_render(
     for s, e, mid in all_marker_spans:
         if mid in surviving_markers:
             cite_id = survivors[mid]
-            out = out[:s] + f"[{cite_id}]" + out[e:]
+            mk = markers_by_id[mid]
+            if mk.wrap_kind == "wrap":
+                href = _cite_url(web_base, run_dir, cite_id)
+                quote_escaped = mk.quote.replace('"', '\\"')
+                out = (
+                    out[:s]
+                    + f'[{mk.claim_text}]({href} "{quote_escaped}")'
+                    + out[e:]
+                )
+            else:
+                out = out[:s] + f"[{cite_id}]" + out[e:]
         else:
             out = out[:s] + out[e:]
 
-    # Append reference block.
-    if cite_records:
+    # Append reference block — only for point-style cites. Wrap-style
+    # cites are self-contained inline links and need no appendix.
+    point_records = [r for r in cite_records
+                     if r["marker"].wrap_kind != "wrap"]
+    if point_records:
         refs = "\n".join(
             f"[{r['cite_id']}]: {_cite_url(web_base, run_dir, r['cite_id'])}"
-            for r in cite_records
+            for r in point_records
         )
         out = f"{out.rstrip()}\n\n{refs}\n"
 
@@ -189,6 +205,9 @@ def run_render(
                 "cite_id": r["cite_id"],
                 "source_type": r["kind"],
                 "cited_text": r["marker"].quote,
+                "wrap_kind": r["marker"].wrap_kind,
+                **({"claim_text": r["marker"].claim_text}
+                   if r["marker"].claim_text is not None else {}),
                 **({
                     "doc_stem": r["marker"].pdf_stem,
                     "chunk_id": r["marker"].chunk_id,
