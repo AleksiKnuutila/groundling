@@ -58,3 +58,26 @@ def ask(
         typer.echo("(no citations returned)", err=True)
         raise typer.Exit(code=5)
     typer.echo(result.answer_md)
+
+
+@app.command()
+def prep(
+    corpus: Path = typer.Option(
+        ..., "--corpus", exists=True, file_okay=False, dir_okay=True,
+    ),
+    out: Path = typer.Option(None, "--out"),
+    no_tables: bool = typer.Option(
+        False, "--no-tables",
+        help="Skip page.find_tables() — for debugging or prose-only corpora.",
+    ),
+):
+    """Build a prep dir from a corpus of PDFs (for agent-driven mode)."""
+    from groundling.prep import run_prep
+    try:
+        prep_dir = run_prep(
+            corpus, out_dir=out, detect_tables=not no_tables,
+        )
+    except ZeroCorpusError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=2)
+    typer.echo(str(prep_dir))

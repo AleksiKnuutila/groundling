@@ -1,10 +1,16 @@
 """Per-PDF prep artefacts: chunks.json + linearized.txt + record dict."""
 from __future__ import annotations
 
+import datetime as dt
 import json
 from pathlib import Path
 
+from groundling.agent import compute_dispatch_hint
 from groundling.chunker import chunk_pdf
+from groundling.errors import ZeroCorpusError
+
+
+DEFAULT_PREP_SUBDIR = ".groundling-prep"
 
 
 def _approx_tokens(text: str) -> int:
@@ -88,3 +94,37 @@ def write_pdf_artifacts(
         "n_chunks": len(chunks),
         "linearized_tokens": _approx_tokens(linearized),
     }
+
+
+def run_prep(
+    corpus_dir: Path,
+    *,
+    out_dir: Path | None,
+    detect_tables: bool,
+) -> Path:
+    """Walk <corpus>/*.pdf sorted, write per-PDF artefacts, aggregate a
+    dispatch hint, return the prep dir path.
+
+    Default out_dir is <corpus>/.groundling-prep/<utc-timestamp>/. Raises
+    ZeroCorpusError if the corpus contains no PDFs.
+    """
+    pdfs = sorted(corpus_dir.glob("*.pdf"))
+    if not pdfs:
+        raise ZeroCorpusError(f"No PDFs found in {corpus_dir}")
+    if out_dir is None:
+        stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H-%M-%S")
+        out_dir = corpus_dir / DEFAULT_PREP_SUBDIR / stamp
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    records: list[dict] = []
+    for pdf in pdfs:
+        records.append(write_pdf_artifacts(
+            pdf, out_dir=out_dir, detect_tables=detect_tables,
+        ))
+
+    hint = compute_dispatch_hint(records)
+    hint["pdfs"] = [r["pdf_stem"] for r in records]
+    (out_dir / "dispatch_hint.json").write_text(
+        json.dumps(hint, indent=2)
+    )
+    return out_dir
