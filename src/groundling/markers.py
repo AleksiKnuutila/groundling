@@ -66,3 +66,48 @@ def parse_markers(markdown: str) -> list[Marker]:
                 url=mm.group("url"),
             ))
     return out
+
+
+def _normalised(text: str) -> str:
+    return " ".join(text.split())
+
+
+def resolve_marker_to_spans(
+    marker: Marker,
+    chunks: list[dict],
+    words: list[dict],
+) -> list[dict] | None:
+    """Look up the marker's chunk, verify the quote is a substring, and
+    map the matched range to a list of {page, bbox} word entries.
+
+    Returns None when the chunk is unknown or the quote isn't in it.
+    """
+    if marker.kind != "pdf":
+        return None
+    chunks_by_id = {c["chunk_id"]: c for c in chunks}
+    chunk = chunks_by_id.get(marker.chunk_id)
+    if chunk is None:
+        return None
+
+    chunk_text = chunk["text"]
+    quote_norm = _normalised(marker.quote)
+    text_norm = _normalised(chunk_text)
+    if quote_norm not in text_norm:
+        return None
+
+    # Walk the chunk's words and find the slice whose joined text
+    # contains the quote. We pick the smallest window that contains
+    # the quote.
+    chunk_words = words[chunk["word_idx_start"]:chunk["word_idx_end"]]
+    best: tuple[int, int] | None = None
+    for i in range(len(chunk_words)):
+        for j in range(i + 1, len(chunk_words) + 1):
+            window = _normalised(" ".join(w["content"] for w in chunk_words[i:j]))
+            if quote_norm in window:
+                if best is None or (j - i) < (best[1] - best[0]):
+                    best = (i, j)
+                break  # smallest j for this i is enough
+    if best is None:
+        return None
+    i, j = best
+    return [{"page": w["page"], "bbox": list(w["bbox"])} for w in chunk_words[i:j]]
