@@ -7,6 +7,7 @@ updates the section in place without clobbering the rest of the file.
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from importlib.resources import files
 from pathlib import Path
 
@@ -55,3 +56,27 @@ def inject_section(*, existing: str | None, template: str) -> str:
     # our section.
     sep = "" if existing.endswith("\n") else "\n"
     return f"{existing}{sep}\n{wrapped}"
+
+
+@dataclass
+class InitResult:
+    path: Path
+    action: str  # "created" | "updated" | "appended"
+
+
+def run_init(cwd: Path) -> InitResult:
+    """Read existing AGENTS.md (if any), inject/replace our section,
+    write back. Returns what happened so the CLI can report it."""
+    target = cwd / "AGENTS.md"
+    template = load_template()
+
+    if target.exists():
+        existing = target.read_text(encoding="utf-8")
+        action = "updated" if BEGIN_MARKER in existing else "appended"
+    else:
+        existing = None
+        action = "created"
+
+    new_content = inject_section(existing=existing, template=template)
+    target.write_text(new_content, encoding="utf-8")
+    return InitResult(path=target, action=action)

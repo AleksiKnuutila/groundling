@@ -1,10 +1,17 @@
 """Pure-function tests for inject_section: no I/O, no fixtures."""
 from __future__ import annotations
 
+from pathlib import Path
+
+from typer.testing import CliRunner
+
+from groundling.cli import app
 from groundling.init_cmd import (
     BEGIN_MARKER,
     END_MARKER,
+    InitResult,
     inject_section,
+    run_init,
 )
 
 
@@ -95,3 +102,88 @@ def test_markers_include_v1_version_suffix():
     assert "v1" in BEGIN_MARKER
     assert BEGIN_MARKER == "<!-- BEGIN GROUNDLING INSTRUCTIONS v1 -->"
     assert END_MARKER == "<!-- END GROUNDLING INSTRUCTIONS -->"
+
+
+def test_run_init_creates_agents_md_in_empty_dir(tmp_path):
+    """When AGENTS.md doesn't exist, run_init creates it with our
+    wrapped section."""
+    result = run_init(tmp_path)
+    target = tmp_path / "AGENTS.md"
+    assert target.exists()
+    content = target.read_text(encoding="utf-8")
+    assert BEGIN_MARKER in content
+    assert END_MARKER in content
+    assert "# Grounded Q&A — groundling" in content
+    assert result.path == target
+    assert result.action == "created"
+
+
+def test_run_init_updates_existing_marked_file(tmp_path):
+    """When AGENTS.md exists with our markers, run_init replaces the
+    section in place — preserving user content around it."""
+    target = tmp_path / "AGENTS.md"
+    target.write_text(
+        f"# My project\n\nUser content.\n\n"
+        f"{BEGIN_MARKER}\nold stuff\n{END_MARKER}\n",
+        encoding="utf-8",
+    )
+    result = run_init(tmp_path)
+    content = target.read_text(encoding="utf-8")
+    assert "User content." in content
+    assert "old stuff" not in content
+    assert "# Grounded Q&A — groundling" in content
+    assert content.count(BEGIN_MARKER) == 1
+    assert result.action == "updated"
+
+
+def test_run_init_appends_to_unmarked_file(tmp_path):
+    """When AGENTS.md exists without our markers, run_init appends our
+    section at the end, preserving all user content."""
+    target = tmp_path / "AGENTS.md"
+    target.write_text("# Their stuff\n\nPre-existing prose.\n", encoding="utf-8")
+    result = run_init(tmp_path)
+    content = target.read_text(encoding="utf-8")
+    assert content.startswith("# Their stuff")
+    assert "Pre-existing prose." in content
+    assert BEGIN_MARKER in content
+    assert "# Grounded Q&A — groundling" in content
+    assert result.action == "appended"
+
+
+def test_cli_init_creates_file_in_cwd(tmp_path, monkeypatch):
+    """`groundling init` writes AGENTS.md in the current working dir."""
+    monkeypatch.chdir(tmp_path)
+    runner = CliRunner()
+    result = runner.invoke(app, ["init"])
+    assert result.exit_code == 0, result.stdout + result.stderr
+    assert (tmp_path / "AGENTS.md").exists()
+    # Stdout reports what happened (path + action).
+    assert "AGENTS.md" in result.stdout
+    assert "created" in result.stdout.lower()
+
+
+def test_cli_init_is_idempotent_on_repeat(tmp_path, monkeypatch):
+    """Two runs of `groundling init` produce the same file content."""
+    monkeypatch.chdir(tmp_path)
+    runner = CliRunner()
+    runner.invoke(app, ["init"])
+    first = (tmp_path / "AGENTS.md").read_text()
+    result = runner.invoke(app, ["init"])
+    second = (tmp_path / "AGENTS.md").read_text()
+    assert result.exit_code == 0
+    assert first == second
+    # Second run reports "updated" (markers present from first run).
+    assert "updated" in result.stdout.lower()
+
+
+def test_cli_instructions_prints_template(tmp_path, monkeypatch):
+    """`groundling instructions` prints the bundled template to stdout."""
+    monkeypatch.chdir(tmp_path)
+    runner = CliRunner()
+    result = runner.invoke(app, ["instructions"])
+    assert result.exit_code == 0
+    assert "# Grounded Q&A — groundling" in result.stdout
+    assert "Mode A" in result.stdout
+    assert "Mode B" in result.stdout
+    # Does NOT write anything to disk.
+    assert not (tmp_path / "AGENTS.md").exists()

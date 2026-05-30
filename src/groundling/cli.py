@@ -152,3 +152,28 @@ def serve(
     except KeyboardInterrupt:
         typer.echo("shutting down", err=True)
         httpd.shutdown()
+
+
+@app.command()
+def init():
+    """Drop or refresh AGENTS.md in the current directory.
+
+    Creates AGENTS.md with groundling's workflow instructions if absent.
+    If AGENTS.md exists and already has our marked section, updates it
+    in place. If AGENTS.md exists without our markers, appends our
+    section at the end — preserving the user's content.
+    """
+    from pathlib import Path
+
+    from groundling.init_cmd import run_init
+
+    result = run_init(Path.cwd())
+    typer.echo(f"{result.action}: {result.path}")
+
+
+@app.command()
+def instructions():
+    """Print the bundled AGENTS.md template to stdout — no write."""
+    from groundling.init_cmd import load_template
+
+    typer.echo(load_template())
