@@ -43,3 +43,80 @@ def build_cite_attrs(
     attrs["data-bw"] = str(int((x1 - x0) * scale))
     attrs["data-bh"] = str(int((y1 - y0) * scale))
     return attrs
+
+
+import re
+
+from markdown_it import MarkdownIt
+
+
+def _cite_id_from_href(
+    href: str,
+    *,
+    run_dir_name: str,
+) -> int | None:
+    """Extract cite_id from a `…/<run_dir_name>/cites/N.html` href.
+    Returns None if href doesn't match the cite URL pattern."""
+    m = re.search(
+        rf"/{re.escape(run_dir_name)}/cites/(\d+)\.html$", href,
+    )
+    return int(m.group(1)) if m else None
+
+
+def decorate_answer_html(
+    *,
+    answer_md: str,
+    cite_records: list[dict],
+    image_dims: dict[int, tuple[str, int, int]],
+    run_dir_name: str,
+    web_base: str,
+    scale: float,
+) -> str:
+    """Render answer_md to HTML and decorate cite anchors with
+    `class="cite"` + data-* attributes + a child <span class="preview">.
+
+    Non-cite links (any other href) are left untouched.
+
+    image_dims maps cite_id -> (image_filename, image_w_px, image_h_px)
+    for PDF cites. Web cites are absent."""
+    records_by_id = {r["cite_id"]: r for r in cite_records}
+
+    md = MarkdownIt("commonmark").enable("table")
+    # Allow file:// URLs so local-file cite hrefs survive rendering.
+    md.validateLink = lambda url: True
+    html = md.render(answer_md)
+
+    # Walk anchors via regex. The HTML markdown-it emits is well-formed
+    # enough that a single non-greedy <a …>…</a> regex catches every
+    # link cleanly. We rewrite each anchor in place.
+    anchor_re = re.compile(
+        r'<a\s+href="([^"]+)"([^>]*)>(.*?)</a>',
+        re.DOTALL,
+    )
+
+    def _replace(m: re.Match) -> str:
+        href, rest, inner = m.group(1), m.group(2), m.group(3)
+        cite_id = _cite_id_from_href(href, run_dir_name=run_dir_name)
+        if cite_id is None or cite_id not in records_by_id:
+            return m.group(0)  # not a cite link — leave alone
+
+        record = records_by_id[cite_id]
+        if record["kind"] == "pdf":
+            image_filename, image_w_px, image_h_px = image_dims[cite_id]
+        else:
+            image_filename, image_w_px, image_h_px = None, None, None
+
+        attrs = build_cite_attrs(
+            record,
+            image_filename=image_filename,
+            image_w_px=image_w_px,
+            image_h_px=image_h_px,
+            scale=scale,
+        )
+        attrs_str = " ".join(f'{k}="{v}"' for k, v in attrs.items())
+        return (
+            f'<a class="cite" href="{href}"{rest} {attrs_str}>'
+            f'{inner}<span class="preview"></span></a>'
+        )
+
+    return anchor_re.sub(_replace, html)

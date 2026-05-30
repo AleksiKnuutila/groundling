@@ -58,3 +58,120 @@ def test_build_cite_attrs_web():
         scale=2.0,
     )
     assert attrs == {"data-cite-id": "3", "data-kind": "web"}
+
+
+import re
+from pathlib import Path
+
+from groundling.answer_html import decorate_answer_html
+
+
+def _records(*items) -> list[dict]:
+    return list(items)
+
+
+def test_decorate_answer_html_wrap_cite_decorated():
+    answer_md = (
+        'See [the revenue figure]'
+        '(http://localhost:8123/run-x/cites/1.html "170,360,448,000.00") here.'
+    )
+    cite_records = _records({
+        "cite_id": 1, "kind": "pdf",
+        "spans": [{"page": 1, "bbox": [10.0, 20.0, 30.0, 40.0]}],
+    })
+    image_dims = {1: ("1.png", 1240, 1754)}
+    html = decorate_answer_html(
+        answer_md=answer_md,
+        cite_records=cite_records,
+        image_dims=image_dims,
+        run_dir_name="run-x",
+        web_base="http://localhost:8123",
+        scale=2.0,
+    )
+    # The anchor exists with class="cite" and data attributes.
+    assert 'class="cite"' in html
+    assert 'data-cite-id="1"' in html
+    assert 'data-kind="pdf"' in html
+    assert 'data-img="cites/1.png"' in html
+    assert 'data-bx="20"' in html
+    # The child preview span is there.
+    assert '<span class="preview"></span>' in html
+    # The link text survives.
+    assert ">the revenue figure<" in html
+
+
+def test_decorate_answer_html_point_marker_decorated():
+    """Point markers get rewritten by run_render to [N](href) in the
+    appendix style. decorate_answer_html should handle that shape too —
+    the [N] link text and the anchor href both come from run_render."""
+    answer_md = (
+        'See [1] for the figure.\n\n'
+        '[1]: http://localhost:8123/run-x/cites/1.html\n'
+    )
+    cite_records = _records({
+        "cite_id": 1, "kind": "pdf",
+        "spans": [{"page": 1, "bbox": [10.0, 20.0, 30.0, 40.0]}],
+    })
+    image_dims = {1: ("1.png", 1240, 1754)}
+    html = decorate_answer_html(
+        answer_md=answer_md,
+        cite_records=cite_records,
+        image_dims=image_dims,
+        run_dir_name="run-x",
+        web_base="http://localhost:8123",
+        scale=2.0,
+    )
+    # The reference-style [1] becomes an <a> via markdown-it; we should
+    # find it decorated.
+    assert 'class="cite"' in html
+    assert 'data-cite-id="1"' in html
+
+
+def test_decorate_answer_html_web_cite_no_image_attrs():
+    answer_md = (
+        '[from the news](http://localhost:8123/run-x/cites/1.html "the quote") here.'
+    )
+    cite_records = _records({"cite_id": 1, "kind": "web"})
+    html = decorate_answer_html(
+        answer_md=answer_md, cite_records=cite_records,
+        image_dims={},  # web cites have no image
+        run_dir_name="run-x",
+        web_base="http://localhost:8123", scale=2.0,
+    )
+    assert 'data-kind="web"' in html
+    assert 'data-img=' not in html
+    assert 'data-bx=' not in html
+
+
+def test_decorate_answer_html_non_cite_links_untouched():
+    answer_md = 'See [the docs](https://example.com/docs) for details.'
+    html = decorate_answer_html(
+        answer_md=answer_md, cite_records=[],
+        image_dims={},
+        run_dir_name="run-x",
+        web_base="http://localhost:8123", scale=2.0,
+    )
+    assert 'class="cite"' not in html
+    assert 'href="https://example.com/docs"' in html
+
+
+def test_decorate_answer_html_file_url_base():
+    """Default web_base is file://. Cite anchors come out as
+    file://<abs>/run-x/cites/1.html. The matcher should handle both
+    schemes."""
+    answer_md = (
+        '[claim](file:///tmp/qa-runs/run-x/cites/1.html "quote")'
+    )
+    cite_records = _records({
+        "cite_id": 1, "kind": "pdf",
+        "spans": [{"page": 1, "bbox": [10.0, 20.0, 30.0, 40.0]}],
+    })
+    image_dims = {1: ("1.png", 1240, 1754)}
+    html = decorate_answer_html(
+        answer_md=answer_md, cite_records=cite_records,
+        image_dims=image_dims,
+        run_dir_name="run-x",
+        web_base="file:///tmp/qa-runs", scale=2.0,
+    )
+    assert 'class="cite"' in html
+    assert 'data-cite-id="1"' in html
