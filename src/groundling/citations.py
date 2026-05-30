@@ -34,13 +34,26 @@ def build_manifest(
     docs_by_idx = {d["doc_idx"]: d for d in docs}
     citations_out: list[dict] = []
     cite_id = 0
+    # Dedupe identical citations across response blocks: two text blocks
+    # citing the same (doc, char range) collapse to one cite_id.
+    seen_pdf: dict[tuple[int, int, int], int] = {}
+    seen_web: dict[tuple[str, str], int] = {}
     for block in _iter_text_blocks(response):
         for cit in getattr(block, "citations", None) or []:
             ctype = getattr(cit, "type", None)
             if ctype == "char_location":
-                cite_id += 1
+                key = (cit.document_index, cit.start_char_index, cit.end_char_index)
+                if key in seen_pdf:
+                    continue
                 doc = docs_by_idx.get(cit.document_index)
                 spans = _spans_for(doc, cit.start_char_index, cit.end_char_index) if doc else []
+                if not spans:
+                    # Drop PDF citations that don't resolve to any spans —
+                    # otherwise the markdown formatter would emit a [N] link
+                    # to a cites/N.html file that render_cite_pdf never writes.
+                    continue
+                cite_id += 1
+                seen_pdf[key] = cite_id
                 citations_out.append({
                     "cite_id": cite_id,
                     "source_type": "pdf",
@@ -51,7 +64,11 @@ def build_manifest(
                     "spans": spans,
                 })
             elif ctype == "web_search_result_location":
+                key = (getattr(cit, "url", ""), getattr(cit, "encrypted_index", ""))
+                if key in seen_web:
+                    continue
                 cite_id += 1
+                seen_web[key] = cite_id
                 citations_out.append({
                     "cite_id": cite_id,
                     "source_type": "web",

@@ -356,8 +356,11 @@ the user can see what the call cost.
 | 0 | Success |
 | 2 | Corpus has zero PDFs |
 | 3 | PDF text-extraction failed (scan / encrypted) |
-| 4 | Anthropic API call failed |
 | 5 | Zero citations returned (ungrounded answer) |
+
+Exit 4 (Anthropic API failure) is not wired in v1; uncaught SDK
+exceptions propagate as exit 1. Revisit when the SDK exception surface
+stabilises.
 
 `.env` autoload via `python-dotenv` so `ANTHROPIC_API_KEY` works
 without a global export.
@@ -395,8 +398,7 @@ links to verify sources.
 If the user wants the answer to also draw on current web sources, add
 `--web-search`. Default is docs-only.
 
-Exit codes: 0 success, 2 no PDFs, 3 scan/encrypted PDF, 4 API failure,
-5 zero citations.
+Exit codes: 0 success, 2 no PDFs, 3 scan/encrypted PDF, 5 zero citations.
 
 State under `<corpus>/qa-runs/` (gitignore it). Cache under
 `<corpus>/.groundling-cache/`.

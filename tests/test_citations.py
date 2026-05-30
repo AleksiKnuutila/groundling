@@ -111,7 +111,10 @@ def test_no_citations_yields_empty_list():
     assert manifest["citations"] == []
 
 
-def test_unknown_doc_idx_yields_empty_spans():
+def test_unknown_doc_idx_drops_the_citation():
+    """When document_index points at no known doc, the citation has
+    nowhere to highlight, so it's dropped rather than emitted as an
+    orphan [N] link pointing at a missing cites/N.html file."""
     response = _ns(content=[
         _ns(type="text", text="hi", citations=[
             _ns(type="char_location", document_index=99,
@@ -122,4 +125,68 @@ def test_unknown_doc_idx_yields_empty_spans():
     manifest = build_manifest(
         run_id="r", model="m", question="q", docs=[], response=response,
     )
-    assert manifest["citations"][0]["spans"] == []
+    assert manifest["citations"] == []
+
+
+def test_pdf_citation_with_no_resolved_spans_is_dropped():
+    """A char range that falls between offset_map entries (e.g. on the
+    inter-word space) drops the citation rather than emitting an orphan."""
+    words = [
+        {"content": "Hello", "page": 1, "bbox": [0, 0, 10, 5]},
+        {"content": "world.", "page": 1, "bbox": [11, 0, 25, 5]},
+    ]
+    _, offset_map = linearize_words(words)
+    doc = {"doc_idx": 0, "pdf_path": "/abs/x.pdf", "offset_map": offset_map}
+    # Char 5 is the separator between "Hello" and "world." — no overlap.
+    response = _ns(content=[
+        _ns(type="text", text="hi", citations=[
+            _ns(type="char_location", document_index=0,
+                document_title="x.pdf", cited_text="?",
+                start_char_index=5, end_char_index=6),
+        ]),
+    ])
+    manifest = build_manifest(
+        run_id="r", model="m", question="q", docs=[doc], response=response,
+    )
+    assert manifest["citations"] == []
+
+
+def test_duplicate_char_location_collapses_to_single_cite():
+    """Two response blocks citing the same (doc_idx, char range) should
+    produce one manifest entry, not two. Otherwise the markdown formatter
+    would emit [1] for both blocks and orphan [2] in the reference list."""
+    words = [
+        {"content": "Hello", "page": 1, "bbox": [0, 0, 10, 5]},
+    ]
+    _, offset_map = linearize_words(words)
+    doc = {"doc_idx": 0, "pdf_path": "/abs/x.pdf", "offset_map": offset_map}
+    cit = _ns(
+        type="char_location", document_index=0,
+        document_title="x.pdf", cited_text="Hello",
+        start_char_index=0, end_char_index=5,
+    )
+    response = _ns(content=[
+        _ns(type="text", text="first", citations=[cit]),
+        _ns(type="text", text="second", citations=[cit]),
+    ])
+    manifest = build_manifest(
+        run_id="r", model="m", question="q", docs=[doc], response=response,
+    )
+    assert len(manifest["citations"]) == 1
+    assert manifest["citations"][0]["cite_id"] == 1
+
+
+def test_duplicate_web_citation_collapses_to_single_cite():
+    cit = _ns(
+        type="web_search_result_location",
+        url="https://example.com/x", title="t",
+        cited_text="quote", encrypted_index="EncIdx",
+    )
+    response = _ns(content=[
+        _ns(type="text", text="first", citations=[cit]),
+        _ns(type="text", text="second", citations=[cit]),
+    ])
+    manifest = build_manifest(
+        run_id="r", model="m", question="q", docs=[], response=response,
+    )
+    assert len(manifest["citations"]) == 1
