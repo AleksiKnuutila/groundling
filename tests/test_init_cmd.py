@@ -9,7 +9,6 @@ from groundling.cli import app
 from groundling.init_cmd import (
     BEGIN_MARKER,
     END_MARKER,
-    InitResult,
     inject_section,
     run_init,
 )

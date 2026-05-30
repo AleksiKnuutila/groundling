@@ -66,7 +66,8 @@ class InitResult:
 
 def run_init(cwd: Path) -> InitResult:
     """Read existing AGENTS.md (if any), inject/replace our section,
-    write back. Returns what happened so the CLI can report it."""
+    write back. Returns what happened so the CLI can report it.
+    """
     target = cwd / "AGENTS.md"
     template = load_template()
 

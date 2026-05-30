@@ -163,8 +163,6 @@ def init():
     in place. If AGENTS.md exists without our markers, appends our
     section at the end — preserving the user's content.
     """
-    from pathlib import Path
-
     from groundling.init_cmd import run_init
 
     result = run_init(Path.cwd())
