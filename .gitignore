@@ -26,5 +26,8 @@ qa-runs/
 .idea/
 *.swp
 
+# Worktrees
+.worktrees/
+
 # OS
 .DS_Store
