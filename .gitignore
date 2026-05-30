@@ -7,9 +7,6 @@ dist/
 build/
 *.egg-info/
 
-# uv
-uv.lock
-
 # pytest
 .pytest_cache/
 
