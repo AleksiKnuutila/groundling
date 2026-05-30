@@ -1,74 +1,97 @@
 # groundling
 
-Grounded Q&A over a folder of PDFs, with citations you can click to verify.
+Grounded Q&A over a folder of PDFs, with cite links you can click to
+verify. Designed for use from Claude Code (or any AGENTS.md-aware
+agent).
 
-Designed for use from Claude Code: drop `AGENTS.md` into your project,
-set `ANTHROPIC_API_KEY`, ask questions. The tool prints a markdown answer
-with clickable citation links — PDF citations open a local HTML page with
-the cited page rendered and the cited text highlighted; web citations
-(opt-in via `--web-search`) open the source URL with the cited sentence
-highlighted natively by the browser.
+Two modes — pick based on what you have:
+
+- **Mode A — API-backed.** `groundling ask "..."` calls the Anthropic
+  Messages API with citations enabled. Single command, pay-per-token.
+- **Mode B — agent-driven.** `groundling prep` + agent fan-out +
+  `groundling render` uses your Claude subscription. The agent reads
+  per-PDF linearized text, emits cite markers, render validates them
+  into clickable links.
+
+Both modes produce `answer.md` + a self-contained `answer.html`
+browser view with cite highlights, hover-to-preview-PDF popovers,
+and click-opens-side-pane source viewing.
 
 ## Install
 
     pipx install groundling
-    # or:
-    uv tool install groundling
+    # or, for local development:
+    pipx install /path/to/groundling
 
 ## Quick start
 
-    export ANTHROPIC_API_KEY=sk-ant-...
-    cd my-research/                          # contains docs/ with PDFs
-    curl -O https://.../groundling/AGENTS.md  # one-time template download
-    claude
+    cd ~/my-research/        # contains your PDFs
+    groundling init          # drops AGENTS.md
+    claude                   # or codex, or any AGENTS.md-aware agent
 
-In the agent session: `> what was BYD's Q1 2025 revenue?`
+In the agent session:
 
-The agent reads `AGENTS.md`, runs `groundling ask --corpus docs/ "..."`,
-and shows you the markdown answer with citation links. Click a `[N]` to
-open the cited page in your browser.
+    > what does Q1 say about revenue growth?
 
-## CLI
+The agent reads AGENTS.md, picks the appropriate mode (Mode A if
+`ANTHROPIC_API_KEY` is set, Mode B otherwise), runs groundling, prints
+the answer with cite links.
 
-    groundling ask "question" --corpus DIR [--web-search] [--model MODEL]
+## Browser viewing
 
-| Flag | Default | Description |
-|---|---|---|
-| `--corpus` | (required) | Directory of PDFs |
-| `--model` | `claude-sonnet-4-6` | Anthropic model ID |
-| `--state-dir` | `<corpus>/qa-runs` | Where run dirs are written |
-| `--cache-dir` | `<corpus>/.groundling-cache` | Per-PDF word-extraction cache |
-| `--web-search` | off | Enable Anthropic's server-side web_search tool |
+    groundling serve                                    # in another shell
+    # then open in browser:
+    http://localhost:8123/<run_id>/answer.html
 
-Exit codes: 0 success, 2 no PDFs, 3 unextractable PDF (scan), 5 no citations.
+Cite spans are highlighted; hover any cite to see a popover with the
+source PDF region; click to open the full cite page in a side pane.
+
+## Commands
+
+| Command | Purpose |
+| --- | --- |
+| `groundling init` | Drop or refresh AGENTS.md in cwd |
+| `groundling instructions` | Print AGENTS.md template to stdout |
+| `groundling ask` | Mode A: one-shot question via Anthropic API |
+| `groundling prep` | Mode B step 1: per-PDF chunks + linearized text |
+| `groundling render` | Mode B step 2: validate agent cite markers → answer.md + answer.html |
+| `groundling serve` | Static HTTP server for cite pages (default port 8123) |
+
+Run any command with `--help` for full flag listings.
+
+## State on disk
+
+Per corpus directory:
+
+- `qa-runs/<run-id>/` — one subdir per question, contains `answer.md`,
+  `answer.html`, `manifest.json`, `cites/N.html`+`cites/N.png`.
+- `.groundling-prep/<stamp>/` — mode-B chunks + linearized text +
+  `dispatch_hint.json`.
+- `.groundling-cache/` — per-PDF word-extraction cache.
+
+All three are gitignore candidates.
 
 ## How it works
 
-1. PyMuPDF extracts word-level bboxes from each PDF.
-2. Words are concatenated into a flat linearized text per PDF.
-3. The Anthropic Messages API is called with citations enabled; the
-   linearized text is sent as a document block, the question as user text.
-4. The response carries `char_location` citations (and
-   `web_search_result_location` citations when `--web-search` is on).
-5. Citations resolve back to PDF bboxes via the offset map.
-6. A run dir is written under `qa-runs/<timestamp>_<question-slug>/`
-   containing one HTML viewer per citation:
-   - PDF cites: rendered PDF page + yellow bbox overlay + sidebar.
-   - Web cites: meta-redirect stub bouncing to a Chrome Text Fragments
-     URL that highlights the cited sentence on the source page.
-7. The markdown answer is printed to stdout; each `[N]` link points at a
-   local `file://...cites/N.html`.
+See `docs/plans/` for design docs covering each mode and the
+intermediate artefacts:
+
+- v1 / Mode A — Anthropic Messages API with citations enabled
+- Agent mode / Mode B — prep + render + marker contract
+- Wrapping-cite contract — wrapping markdown links vs point markers
+- answer.html — browser view with hover preview + side pane
 
 ## Limits
 
-- **No OCR.** PDFs without extractable text (scans) exit 3. OCR them
-  externally first.
-- **No table-structure inference.** PyMuPDF's reading order is used as-is.
-  Complex multi-column layouts may produce garbled linearization; cited
-  bboxes are still correct (per-word), but the answer quality drops.
-- **No persistent project model.** Each `groundling ask` invocation is a
-  fresh, isolated run. Past runs accumulate under `qa-runs/`; delete the
-  directory whenever.
+- **No OCR.** Scanned PDFs without extractable text exit early
+  (`groundling ask` exit code 3). OCR externally first.
+- **No table-structure inference for prose linearization.** Mode A
+  uses PyMuPDF's reading order as-is; complex multi-column layouts
+  may produce garbled linearization, though cited bboxes remain
+  correct per-word. Mode B uses `find_tables()` for tighter
+  per-cell chunks when `--tables` is on.
+- **No persistent project model.** Each invocation is a fresh,
+  isolated run. Past runs accumulate under `qa-runs/`.
 
 ## License
 
