@@ -76,10 +76,9 @@ All three are gitignore candidates.
 See `docs/plans/` for design docs covering each mode and the
 intermediate artefacts:
 
-- v1 / Mode A — Anthropic Messages API with citations enabled
-- Agent mode / Mode B — prep + render + marker contract
-- Wrapping-cite contract — wrapping markdown links vs point markers
-- answer.html — browser view with hover preview + side pane
+- `2026-05-30-groundling-design.md` — Mode A: Anthropic Messages API with citations enabled
+- `2026-05-30-agent-mode-design.md` — Mode B: prep + render + marker contract (both wrapping and point shapes)
+- `2026-05-30-answer-html-design.md` — browser view with hover preview + side pane
 
 ## Limits
 
@@ -89,7 +88,7 @@ intermediate artefacts:
   uses PyMuPDF's reading order as-is; complex multi-column layouts
   may produce garbled linearization, though cited bboxes remain
   correct per-word. Mode B uses `find_tables()` for tighter
-  per-cell chunks when `--tables` is on.
+  per-cell chunks (on by default; pass `--no-tables` to disable).
 - **No persistent project model.** Each invocation is a fresh,
   isolated run. Past runs accumulate under `qa-runs/`.
 
