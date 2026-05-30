@@ -81,3 +81,31 @@ def prep(
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=2)
     typer.echo(str(prep_dir))
+
+
+@app.command()
+def render(
+    prep_dir: Path = typer.Argument(
+        ..., exists=True, file_okay=False, dir_okay=True,
+    ),
+    answer: str = typer.Option(
+        ..., "--answer",
+        help="Path to answer markdown file, or `-` for stdin.",
+    ),
+    state_dir: Path = typer.Option(None, "--state-dir"),
+):
+    """Validate agent markers, generate cite HTML, rewrite markdown."""
+    import sys
+    from groundling.render_cmd import run_render
+    if answer == "-":
+        answer_md = sys.stdin.read()
+    else:
+        answer_md = Path(answer).read_text(encoding="utf-8")
+    result = run_render(
+        prep_dir=prep_dir, answer_md=answer_md, state_dir=state_dir,
+    )
+    typer.echo(result.markdown)
+    parts = [f"{k}={v}" for k, v in result.counters.items()]
+    typer.echo(" ".join(parts), err=True)
+    if result.counters["validated"] == 0:
+        raise typer.Exit(code=5)
