@@ -175,3 +175,39 @@ def test_decorate_answer_html_file_url_base():
     )
     assert 'class="cite"' in html
     assert 'data-cite-id="1"' in html
+
+
+from groundling.answer_html import build_answer_html
+
+
+def test_build_answer_html_emits_full_page():
+    answer_md = (
+        '[claim](http://localhost:8123/run-x/cites/1.html "q")'
+    )
+    cite_records = _records({
+        "cite_id": 1, "kind": "pdf",
+        "spans": [{"page": 1, "bbox": [10.0, 20.0, 30.0, 40.0]}],
+    })
+    image_dims = {1: ("1.png", 1240, 1754)}
+    html = build_answer_html(
+        answer_md=answer_md,
+        cite_records=cite_records,
+        image_dims=image_dims,
+        run_dir_name="run-x",
+        web_base="http://localhost:8123",
+        scale=2.0,
+    )
+    # Doctype + page shell.
+    assert html.startswith("<!doctype html>") or html.startswith("<!DOCTYPE html>")
+    # Decorated cite anchor.
+    assert 'class="cite"' in html
+    # Side pane markup.
+    assert '<aside class="cite-pane"' in html
+    assert '<iframe' in html
+    # JS hooks: hover-capability check + pane-open class.
+    assert "(hover: hover)" in html
+    assert "pane-open" in html
+    # Cite highlight CSS — at least the background colour rule.
+    assert ".cite" in html
+    # Preview popover CSS.
+    assert ".preview" in html

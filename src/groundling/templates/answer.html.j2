@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Answer</title>
+<style>
+  body { font: 16px/1.55 system-ui, sans-serif; color: #222; margin: 0; display: flex; }
+  main.answer { flex: 1 1 auto; padding: 32px 40px; max-width: 760px; transition: flex-basis 0.2s, max-width 0.2s; }
+  body.pane-open main.answer { flex: 0 0 60%; max-width: none; }
+  body.pane-open aside.cite-pane { display: flex; }
+
+  main.answer h1, main.answer h2, main.answer h3 { line-height: 1.25; }
+  main.answer p { margin: 0.8em 0; }
+  main.answer ul, main.answer ol { padding-left: 1.4em; }
+
+  a.cite {
+    background: #fff7c2;
+    border-bottom: 1px solid #e0c000;
+    text-decoration: none;
+    color: inherit;
+    padding: 0 2px;
+    position: relative;
+    cursor: pointer;
+  }
+  a.cite:hover { background: #ffeb80; }
+
+  /* Hover preview popover. PDF cites use the page image as a CSS
+     background, positioned so the bbox centre sits at the popover
+     centre. Web cites get a quote-only card via a separate rule. */
+  a.cite .preview {
+    display: none;
+    position: absolute;
+    bottom: 1.6em;
+    left: 0;
+    width: 480px;
+    height: 280px;
+    border: 1px solid #bbb;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.2);
+    background-color: #fff;
+    background-repeat: no-repeat;
+    z-index: 100;
+    overflow: hidden;
+    border-radius: 4px;
+  }
+  a.cite:hover .preview { display: block; }
+  a.cite[data-kind="pdf"] .preview {
+    background-image: var(--img);
+    background-size: var(--img-w) var(--img-h);
+    background-position:
+      calc(240px - var(--bx) - var(--bw) / 2)
+      calc(140px - var(--by) - var(--bh) / 2);
+  }
+  a.cite[data-kind="pdf"] .preview::after {
+    content: "";
+    position: absolute;
+    left: calc(240px - var(--bw) / 2);
+    top:  calc(140px - var(--bh) / 2);
+    width: var(--bw);
+    height: var(--bh);
+    background: rgba(255, 235, 0, 0.35);
+    border: 1px solid rgba(200, 160, 0, 0.6);
+  }
+
+  aside.cite-pane {
+    display: none;
+    flex: 0 0 40%;
+    border-left: 1px solid #ddd;
+    background: #fafafa;
+    position: relative;
+    height: 100vh;
+    position: sticky;
+    top: 0;
+  }
+  aside.cite-pane iframe {
+    width: 100%; height: 100%; border: 0;
+  }
+  aside.cite-pane .close {
+    position: absolute; top: 8px; right: 12px;
+    background: #fff; border: 1px solid #ccc; border-radius: 4px;
+    width: 28px; height: 28px; cursor: pointer;
+    font-size: 18px; line-height: 1; padding: 0;
+    z-index: 10;
+  }
+  aside.cite-pane .close:hover { background: #eee; }
+
+  @media (hover: none) {
+    a.cite .preview { display: none !important; }
+  }
+  @media (max-width: 700px) {
+    body.pane-open main.answer { flex: 1 1 auto; }
+    body.pane-open aside.cite-pane { display: none; }
+  }
+</style>
+</head>
+<body>
+<main class="answer">
+{{ answer_html | safe }}
+</main>
+<aside class="cite-pane" hidden>
+  <button class="close" aria-label="Close">×</button>
+  <iframe src="about:blank" title="Cite source"></iframe>
+</aside>
+<script>
+  (function () {
+    const pane = document.querySelector('aside.cite-pane');
+    const iframe = pane.querySelector('iframe');
+    const closeBtn = pane.querySelector('.close');
+
+    // Inject per-cite CSS custom props from data-* (the page-image url
+    // can't sit in static CSS, and CSS calc() math needs the geometry
+    // as CSS units).
+    document.querySelectorAll('a.cite[data-kind="pdf"]').forEach(a => {
+      a.style.setProperty('--img', `url("${a.dataset.img}")`);
+      a.style.setProperty('--img-w', a.dataset.imgW + 'px');
+      a.style.setProperty('--img-h', a.dataset.imgH + 'px');
+      a.style.setProperty('--bx', a.dataset.bx + 'px');
+      a.style.setProperty('--by', a.dataset.by + 'px');
+      a.style.setProperty('--bw', a.dataset.bw + 'px');
+      a.style.setProperty('--bh', a.dataset.bh + 'px');
+    });
+
+    document.querySelectorAll('a.cite').forEach(a => {
+      a.addEventListener('click', e => {
+        if (!window.matchMedia('(hover: hover)').matches) return;
+        e.preventDefault();
+        iframe.src = a.getAttribute('href');
+        pane.hidden = false;
+        document.body.classList.add('pane-open');
+      });
+    });
+
+    closeBtn.addEventListener('click', () => {
+      pane.hidden = true;
+      iframe.src = 'about:blank';
+      document.body.classList.remove('pane-open');
+    });
+
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape' && !pane.hidden) closeBtn.click();
+    });
+  })();
+</script>
+</body>
+</html>

@@ -9,8 +9,17 @@ from __future__ import annotations
 
 import html
 import re
+from pathlib import Path
 
+from jinja2 import Environment, FileSystemLoader, select_autoescape
 from markdown_it import MarkdownIt
+
+
+_TEMPLATE_DIR = Path(__file__).parent / "templates"
+_env = Environment(
+    loader=FileSystemLoader(str(_TEMPLATE_DIR)),
+    autoescape=select_autoescape(["html"]),
+)
 
 
 def build_cite_attrs(
@@ -122,3 +131,28 @@ def decorate_answer_html(
         )
 
     return anchor_re.sub(_replace, rendered_html)
+
+
+def build_answer_html(
+    *,
+    answer_md: str,
+    cite_records: list[dict],
+    image_dims: dict[int, tuple[str, int, int]],
+    run_dir_name: str,
+    web_base: str,
+    scale: float = 2.0,
+) -> str:
+    """Build the full answer.html page from the rewritten markdown.
+
+    Returns a self-contained HTML string. Cite anchors are decorated
+    for hover preview + click-to-side-pane behaviour."""
+    answer_html = decorate_answer_html(
+        answer_md=answer_md,
+        cite_records=cite_records,
+        image_dims=image_dims,
+        run_dir_name=run_dir_name,
+        web_base=web_base,
+        scale=scale,
+    )
+    template = _env.get_template("answer.html.j2")
+    return template.render(answer_html=answer_html)
