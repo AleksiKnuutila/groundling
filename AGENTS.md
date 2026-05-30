@@ -86,6 +86,11 @@ surfacing the counts if any cites were dropped.
 Exit code 5 means zero markers survived validation — your answer is
 ungrounded. Consider rephrasing or asking the user.
 
+If the user's terminal doesn't make `file://` links clickable, pass
+`--web-base http://localhost:8123` to `render` and start `groundling
+serve` in a second shell — that serves the state dir over HTTP so
+cite links open in a browser.
+
 ---
 
 State lives under `<corpus>/qa-runs/` (gitignore it). Cache under

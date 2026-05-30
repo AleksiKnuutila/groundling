@@ -74,6 +74,100 @@ def test_run_render_zero_markers_returns_zero_cites_counter(tmp_path, text_pdf):
     assert result.counters["validated"] == 0
 
 
+def test_cite_url_file_base_emits_absolute_path(tmp_path):
+    from groundling.render_cmd import _cite_url
+    run_dir = tmp_path / "run-abc"
+    run_dir.mkdir()
+    url = _cite_url("file://", run_dir, 3)
+    assert url == f"file://{run_dir.resolve()}/cites/3.html"
+
+
+def test_cite_url_http_base_emits_run_name_path(tmp_path):
+    from groundling.render_cmd import _cite_url
+    run_dir = tmp_path / "2026-05-30T00-00-00_render_abcd"
+    run_dir.mkdir()
+    url = _cite_url("http://localhost:8123", run_dir, 7)
+    assert url == "http://localhost:8123/2026-05-30T00-00-00_render_abcd/cites/7.html"
+
+
+def test_cite_url_http_base_strips_trailing_slash(tmp_path):
+    from groundling.render_cmd import _cite_url
+    run_dir = tmp_path / "run-x"
+    run_dir.mkdir()
+    url = _cite_url("http://localhost:8123/", run_dir, 1)
+    assert url == "http://localhost:8123/run-x/cites/1.html"
+
+
+def test_run_render_web_base_rewrites_reference_block(tmp_path, text_pdf):
+    _, prep_dir = _seeded_prep(tmp_path, text_pdf)
+    chunk_id, quote = _chunk_id_from_prep(prep_dir, "sample")
+    answer = f'see [chunk=sample:{chunk_id} quote="{quote}"] here.'
+    result = run_render(
+        prep_dir=prep_dir, answer_md=answer, state_dir=None,
+        web_base="http://localhost:8123",
+    )
+    assert "file://" not in result.markdown
+    assert f"http://localhost:8123/{result.run_dir.name}/cites/1.html" in result.markdown
+
+
+def test_cli_render_passes_web_base(tmp_path, text_pdf):
+    corpus, prep_dir = _seeded_prep(tmp_path, text_pdf)
+    chunk_id, quote = _chunk_id_from_prep(prep_dir, "sample")
+    answer = f'see [chunk=sample:{chunk_id} quote="{quote}"] here.'
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "render", str(prep_dir),
+            "--answer", "-",
+            "--web-base", "http://localhost:8123",
+        ],
+        input=answer,
+    )
+    assert result.exit_code == 0, result.stdout + result.stderr
+    assert "http://localhost:8123/" in result.stdout
+    assert "/cites/1.html" in result.stdout
+
+
+def test_cli_serve_help_lists_options():
+    runner = CliRunner()
+    result = runner.invoke(app, ["serve", "--help"])
+    assert result.exit_code == 0
+    assert "--state-dir" in result.stdout
+    assert "--port" in result.stdout
+    assert "--host" in result.stdout
+
+
+def test_serve_command_actually_serves_cite_file(tmp_path):
+    """End-to-end smoke: start the server in a thread, fetch a cite, stop it."""
+    import functools
+    import threading
+    import urllib.request
+    from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+
+    state_dir = tmp_path / "qa-runs"
+    run_dir = state_dir / "run-xyz"
+    cite_html = run_dir / "cites" / "1.html"
+    cite_html.parent.mkdir(parents=True)
+    cite_html.write_text("<html>hello cite</html>", encoding="utf-8")
+
+    handler = functools.partial(
+        SimpleHTTPRequestHandler, directory=str(state_dir),
+    )
+    httpd = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    port = httpd.server_address[1]
+    t = threading.Thread(target=httpd.serve_forever, daemon=True)
+    t.start()
+    try:
+        url = f"http://127.0.0.1:{port}/run-xyz/cites/1.html"
+        with urllib.request.urlopen(url, timeout=2) as resp:
+            body = resp.read().decode()
+        assert "hello cite" in body
+    finally:
+        httpd.shutdown()
+        t.join(timeout=2)
+
+
 def test_cli_render_reads_answer_from_stdin(tmp_path, text_pdf):
     corpus, prep_dir = _seeded_prep(tmp_path, text_pdf)
     chunk_id, quote = _chunk_id_from_prep(prep_dir, "sample")

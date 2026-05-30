@@ -13,6 +13,7 @@ from groundling.render import render_cite_pdf, render_cite_web
 
 
 DEFAULT_STATE_SUBDIR = "qa-runs"
+DEFAULT_WEB_BASE = "file://"
 
 
 @dataclass
@@ -34,8 +35,14 @@ def _load_chunks(prep_dir: Path, stem: str) -> list[dict] | None:
     return json.loads(p.read_text())
 
 
-def _file_url(run_dir: Path, cite_id: int) -> str:
-    return f"file://{run_dir.resolve()}/cites/{cite_id}.html"
+def _cite_url(web_base: str, run_dir: Path, cite_id: int) -> str:
+    """Build the URL for cite N. file:// → absolute on-disk path (works
+    on double-click). Any other scheme → http-style URL where the path
+    is the run-dir name + `/cites/N.html`, assuming the server serves
+    state_dir as its root."""
+    if web_base.startswith("file://") or web_base == "":
+        return f"file://{run_dir.resolve()}/cites/{cite_id}.html"
+    return f"{web_base.rstrip('/')}/{run_dir.name}/cites/{cite_id}.html"
 
 
 def run_render(
@@ -43,6 +50,7 @@ def run_render(
     prep_dir: Path,
     answer_md: str,
     state_dir: Path | None,
+    web_base: str = DEFAULT_WEB_BASE,
 ) -> RenderResult:
     # Default state dir is sibling to prep dir, under the corpus root.
     if state_dir is None:
@@ -166,7 +174,7 @@ def run_render(
     # Append reference block.
     if cite_records:
         refs = "\n".join(
-            f"[{r['cite_id']}]: {_file_url(run_dir, r['cite_id'])}"
+            f"[{r['cite_id']}]: {_cite_url(web_base, run_dir, r['cite_id'])}"
             for r in cite_records
         )
         out = f"{out.rstrip()}\n\n{refs}\n"

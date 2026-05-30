@@ -93,6 +93,15 @@ def render(
         help="Path to answer markdown file, or `-` for stdin.",
     ),
     state_dir: Path = typer.Option(None, "--state-dir"),
+    web_base: str = typer.Option(
+        "file://", "--web-base",
+        help=(
+            "Base URL for cite links in the rewritten markdown. Default "
+            "`file://` emits absolute on-disk paths. Pass e.g. "
+            "`http://localhost:8123` to pair with `groundling serve` when "
+            "your terminal doesn't make file:// links clickable."
+        ),
+    ),
 ):
     """Validate agent markers, generate cite HTML, rewrite markdown."""
     import sys
@@ -103,9 +112,43 @@ def render(
         answer_md = Path(answer).read_text(encoding="utf-8")
     result = run_render(
         prep_dir=prep_dir, answer_md=answer_md, state_dir=state_dir,
+        web_base=web_base,
     )
     typer.echo(result.markdown)
     parts = [f"{k}={v}" for k, v in result.counters.items()]
     typer.echo(" ".join(parts), err=True)
     if result.counters["validated"] == 0:
         raise typer.Exit(code=5)
+
+
+@app.command()
+def serve(
+    state_dir: Path = typer.Option(
+        Path("qa-runs"), "--state-dir",
+        help="Directory to serve. Should be the parent of one or more "
+             "render run dirs (the default `--state-dir` for `render`).",
+    ),
+    port: int = typer.Option(8123, "--port"),
+    host: str = typer.Option("127.0.0.1", "--host"),
+):
+    """Serve a state dir over HTTP so cite URLs work in terminals that
+    don't make file:// links clickable. Pair with
+    `groundling render --web-base http://localhost:8123`."""
+    import functools
+    from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+
+    resolved = state_dir.resolve()
+    resolved.mkdir(parents=True, exist_ok=True)
+    handler = functools.partial(
+        SimpleHTTPRequestHandler, directory=str(resolved),
+    )
+    httpd = ThreadingHTTPServer((host, port), handler)
+    typer.echo(f"serving {resolved} on http://{host}:{port}", err=True)
+    typer.echo(
+        f"cite URLs: http://{host}:{port}/<run_id>/cites/N.html", err=True,
+    )
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        typer.echo("shutting down", err=True)
+        httpd.shutdown()
