@@ -57,3 +57,12 @@ def test_chunk_pdf_cell_text_matches_cell_content(table_pdf):
 def test_detect_tables_false_skips_cells(table_pdf):
     chunks = chunk_pdf(table_pdf, detect_tables=False)
     assert not any("t" in c["chunk_id"] for c in chunks)
+
+
+def test_chunk_pdf_does_not_leak_to_stdout(table_pdf, capfd):
+    """find_tables() emits an advisory message to native fd 1 in some
+    PyMuPDF versions. chunk_pdf must suppress it so `groundling prep`'s
+    stdout is exactly the prep dir path."""
+    chunk_pdf(table_pdf, detect_tables=True)
+    out, _err = capfd.readouterr()
+    assert out == "", f"chunker leaked to stdout: {out!r}"

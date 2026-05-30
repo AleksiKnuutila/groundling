@@ -10,6 +10,10 @@ Chunk ID grammar (per-PDF, mirrors groundswell's convention):
 """
 from __future__ import annotations
 
+import contextlib
+import io
+import os
+import sys
 from pathlib import Path
 
 import fitz
@@ -20,6 +24,33 @@ from groundling.extract import extract_words
 def _bbox_contains_point(bbox: list[float], x: float, y: float) -> bool:
     """True iff (x, y) is inside bbox = [x0, y0, x1, y1]."""
     return bbox[0] <= x <= bbox[2] and bbox[1] <= y <= bbox[3]
+
+
+@contextlib.contextmanager
+def _silence_native_stdout():
+    """Suppress stdout writes from PyMuPDF (e.g. find_tables() advisory
+    messages) at both the Python and OS levels so `groundling prep`'s
+    stdout stays exactly the prep dir path. AGENTS.md captures it as
+    `dir=$(groundling prep ...)` and PyMuPDF leaks would break that.
+
+    Belt + braces: redirect_stdout catches Python-level `print()` writes;
+    the fd dup2 catches C-level writes from PyMuPDF's underlying MuPDF.
+    We flush Python's buffer before restoring fd 1 so any buffered
+    writes go to /dev/null rather than the restored fd."""
+    saved_fd = os.dup(1)
+    devnull_fd = os.open(os.devnull, os.O_WRONLY)
+    try:
+        os.dup2(devnull_fd, 1)
+        with contextlib.redirect_stdout(io.StringIO()):
+            yield
+    finally:
+        try:
+            sys.stdout.flush()
+        except Exception:
+            pass
+        os.dup2(saved_fd, 1)
+        os.close(devnull_fd)
+        os.close(saved_fd)
 
 
 def chunk_pdf(pdf_path: Path, *, detect_tables: bool = True) -> list[dict]:
@@ -49,7 +80,8 @@ def chunk_pdf(pdf_path: Path, *, detect_tables: bool = True) -> list[dict]:
             consumed_word_indices: set[int] = set()
             if detect_tables:
                 try:
-                    tables = page.find_tables()
+                    with _silence_native_stdout():
+                        tables = page.find_tables()
                 except Exception:
                     tables = []
                 for t_idx, table in enumerate(getattr(tables, "tables", []) or list(tables)):

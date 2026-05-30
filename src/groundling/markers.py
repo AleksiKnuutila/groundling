@@ -68,8 +68,25 @@ def parse_markers(markdown: str) -> list[Marker]:
     return out
 
 
+# Unicode characters LLMs commonly substitute for their ASCII equivalents
+# when "quoting verbatim". Substring validation collapses both sides via
+# this table before comparison so a curly-apostrophe-in-source vs
+# straight-apostrophe-in-quote doesn't cost the user a citation.
+_UNICODE_FOLDS = str.maketrans({
+    "‘": "'", "’": "'", "‚": "'", "‛": "'",  # single quotes
+    "“": '"', "”": '"', "„": '"', "‟": '"',  # double quotes
+    "–": "-", "—": "-", "―": "-",                  # en/em/horizontal dashes
+    "‐": "-", "‑": "-", "−": "-",                  # hyphen variants + minus
+    " ": " ", " ": " ", " ": " ", " ": " ",   # nbsp + thin/hair/narrow-nbsp
+})
+
+
 def _normalised(text: str) -> str:
-    return " ".join(text.split())
+    """Collapse whitespace and fold LLM-substituted Unicode punctuation
+    to ASCII so verbatim-quote validation doesn't fail on curly quotes,
+    em dashes, or non-breaking spaces the model normalised on its way
+    out."""
+    return " ".join(text.translate(_UNICODE_FOLDS).split())
 
 
 def resolve_marker_to_spans(

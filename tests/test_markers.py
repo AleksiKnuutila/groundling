@@ -101,3 +101,64 @@ def test_resolve_marker_quote_inside_block_returns_subset_of_words():
         {"page": 1, "bbox": [55, 10, 100, 30]},
         {"page": 1, "bbox": [105, 10, 200, 30]},
     ]
+
+
+def test_resolve_marker_curly_apostrophe_matches_straight():
+    """LLMs routinely substitute ASCII apostrophes for curly ones when
+    "quoting verbatim". Validation should accept the substitution rather
+    than dropping the cite."""
+    chunks = [{
+        "chunk_id": "p1:b00", "page": 1, "bbox": [0, 0, 100, 30],
+        "word_idx_start": 0, "word_idx_end": 4,
+        "text": "the Group’s revenue increased",  # U+2019 RIGHT SINGLE QUOTE
+    }]
+    words = [
+        {"content": "the", "page": 1, "bbox": [0, 0, 20, 30]},
+        {"content": "Group’s", "page": 1, "bbox": [25, 0, 60, 30]},
+        {"content": "revenue", "page": 1, "bbox": [65, 0, 85, 30]},
+        {"content": "increased", "page": 1, "bbox": [90, 0, 100, 30]},
+    ]
+    m = Marker(kind="pdf",
+               quote="the Group's revenue",   # ASCII apostrophe
+               span_start=0, span_end=0,
+               pdf_stem="x", chunk_id="p1:b00")
+    spans = resolve_marker_to_spans(m, chunks, words)
+    assert spans is not None
+    assert len(spans) == 3  # "the", "Group’s", "revenue"
+
+
+def test_resolve_marker_em_dash_folds_to_hyphen():
+    chunks = [{
+        "chunk_id": "p1:b00", "page": 1, "bbox": [0, 0, 100, 30],
+        "word_idx_start": 0, "word_idx_end": 3,
+        "text": "growth—substantial—overall",  # em dashes
+    }]
+    words = [
+        {"content": "growth—substantial—overall", "page": 1, "bbox": [0, 0, 100, 30]},
+    ]
+    # Word slice for the chunk is one entry — adjust to single word.
+    chunks[0]["word_idx_end"] = 1
+    m = Marker(kind="pdf",
+               quote="growth-substantial-overall",  # ASCII hyphens
+               span_start=0, span_end=0,
+               pdf_stem="x", chunk_id="p1:b00")
+    spans = resolve_marker_to_spans(m, chunks, words)
+    assert spans is not None
+
+
+def test_resolve_marker_nbsp_folds_to_space():
+    chunks = [{
+        "chunk_id": "p1:b00", "page": 1, "bbox": [0, 0, 100, 30],
+        "word_idx_start": 0, "word_idx_end": 2,
+        "text": "RMB 170 billion",  # NBSPs
+    }]
+    words = [
+        {"content": "RMB", "page": 1, "bbox": [0, 0, 30, 30]},
+        {"content": "170 billion", "page": 1, "bbox": [35, 0, 100, 30]},
+    ]
+    m = Marker(kind="pdf",
+               quote="RMB 170 billion",  # regular spaces
+               span_start=0, span_end=0,
+               pdf_stem="x", chunk_id="p1:b00")
+    spans = resolve_marker_to_spans(m, chunks, words)
+    assert spans is not None
