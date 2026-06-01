@@ -94,7 +94,7 @@
 </main>
 
 {% for cite in inline_cites %}
-<dialog class="cite-detail" id="cite-{{ cite.cite_id }}-detail" data-cite-id="{{ cite.cite_id }}">
+<dialog class="cite-detail" id="cite-{{ cite.cite_id }}" data-cite-id="{{ cite.cite_id }}">
   <button class="close-btn" aria-label="Close">×</button>
   {% if cite.kind == "pdf" %}
   <h3>Cite {{ cite.cite_id }} — {{ cite.filename }} (page {{ cite.page }})</h3>
@@ -102,7 +102,7 @@
   <div class="quote"><strong>Quote:</strong> {{ cite.quote }}</div>
   <div class="pdf-image">
     <img src="{{ cite.data_uri }}" alt="page {{ cite.page }}">
-    <div class="highlight" style="left: {{ cite.bx }}px; top: {{ cite.by }}px; width: {{ cite.bw }}px; height: {{ cite.bh }}px;"></div>
+    <div class="highlight" style="left: {{ cite.bx_pct }}%; top: {{ cite.by_pct }}%; width: {{ cite.bw_pct }}%; height: {{ cite.bh_pct }}%;"></div>
   </div>
   {% else %}
   <h3>Cite {{ cite.cite_id }} — Web</h3>
@@ -127,7 +127,7 @@
     document.querySelectorAll('a.cite').forEach(a => {
       a.addEventListener('click', e => {
         const cid = a.dataset.citeId;
-        const dlg = document.getElementById(`cite-${cid}-detail`);
+        const dlg = document.getElementById(`cite-${cid}`);
         if (dlg) { e.preventDefault(); dlg.showModal(); }
       });
     });

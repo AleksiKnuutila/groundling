@@ -29,7 +29,8 @@ def test_inline_html_has_no_external_resources(tmp_path):
     image_paths = {1: fake_png}
     html = build_inline_answer_html(
         answer_md='[c](cite://1 "test quote")',
-        cite_records=cite_records, image_paths=image_paths, scale=2.0,
+        cite_records=cite_records, image_paths=image_paths,
+        image_dims={1: (1, 1)}, scale=2.0,
     )
     assert 'src="cites/' not in html
     assert 'src="data:image/png;base64,' in html
@@ -51,7 +52,8 @@ def test_inline_html_includes_cite_content_inline(tmp_path):
     }]
     html = build_inline_answer_html(
         answer_md='[c](cite://1 "the cited verbatim text")',
-        cite_records=cite_records, image_paths={1: fake_png}, scale=2.0,
+        cite_records=cite_records, image_paths={1: fake_png},
+        image_dims={1: (1, 1)}, scale=2.0,
     )
     assert "the cited verbatim text" in html
     assert "doc.pdf" in html
@@ -67,7 +69,8 @@ def test_inline_html_handles_web_cites(tmp_path):
     }]
     html = build_inline_answer_html(
         answer_md='[c](cite://1 "the quoted web text")',
-        cite_records=cite_records, image_paths={}, scale=2.0,
+        cite_records=cite_records, image_paths={},
+        image_dims={}, scale=2.0,
     )
     assert 'data-kind="web"' in html
     assert "https://example.com/news" in html
@@ -86,6 +89,7 @@ def test_inline_html_size_bounded(tmp_path):
     }]
     html = build_inline_answer_html(
         answer_md='[c](cite://1 "q")',
-        cite_records=cite_records, image_paths={1: fake_png}, scale=2.0,
+        cite_records=cite_records, image_paths={1: fake_png},
+        image_dims={1: (1, 1)}, scale=2.0,
     )
     assert len(html) < 50_000

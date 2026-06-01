@@ -14,7 +14,6 @@ from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from markdown_it import MarkdownIt
-from PIL import Image
 
 from groundling.answer_html import build_cite_attrs
 
@@ -36,6 +35,7 @@ def build_inline_answer_html(
     answer_md: str,
     cite_records: list[dict],
     image_paths: dict[int, Path],
+    image_dims: dict[int, tuple[int, int]],
     scale: float = 2.0,
 ) -> str:
     """Build a single self-contained HTML file.
@@ -47,6 +47,7 @@ def build_inline_answer_html(
       - pdf_filename (for pdf) or url (for web)
 
     image_paths maps cite_id -> Path to PDF page PNG; base64-inlined.
+    image_dims maps cite_id -> (width_px, height_px) of that PNG.
     answer_md uses cite://N as href scheme (rewritten upstream).
     """
     inline_cites = []
@@ -54,14 +55,22 @@ def build_inline_answer_html(
         cid = rec["cite_id"]
         if rec["kind"] == "pdf":
             data_uri = _png_to_data_uri(image_paths[cid])
+            image_w, image_h = image_dims[cid]
             x0 = min(s["bbox"][0] for s in rec["spans"])
             y0 = min(s["bbox"][1] for s in rec["spans"])
             x1 = max(s["bbox"][2] for s in rec["spans"])
             y1 = max(s["bbox"][3] for s in rec["spans"])
+            bx = int(x0 * scale)
+            by = int(y0 * scale)
+            bw = int((x1 - x0) * scale)
+            bh = int((y1 - y0) * scale)
             inline_cites.append({
                 "cite_id": cid, "kind": "pdf", "data_uri": data_uri,
-                "bx": int(x0 * scale), "by": int(y0 * scale),
-                "bw": int((x1 - x0) * scale), "bh": int((y1 - y0) * scale),
+                "bx": bx, "by": by, "bw": bw, "bh": bh,
+                "bx_pct": bx / image_w * 100,
+                "by_pct": by / image_h * 100,
+                "bw_pct": bw / image_w * 100,
+                "bh_pct": bh / image_h * 100,
                 "quote": rec["marker_quote"],
                 "claim": rec.get("claim_text") or "",
                 "filename": rec.get("pdf_filename", ""),
@@ -76,7 +85,8 @@ def build_inline_answer_html(
             })
 
     decorated_body = _decorate_for_inline(
-        answer_md, cite_records, image_paths=image_paths, scale=scale,
+        answer_md, cite_records,
+        image_paths=image_paths, image_dims=image_dims, scale=scale,
     )
     template = _env.get_template("answer_inline.html.j2")
     return template.render(
@@ -85,7 +95,7 @@ def build_inline_answer_html(
 
 
 def _decorate_for_inline(
-    answer_md, cite_records, *, image_paths, scale,
+    answer_md, cite_records, *, image_paths, image_dims, scale,
 ):
     """Render markdown to HTML; decorate cite anchors with data-* attrs
     and rewrite cite://N hrefs to #cite-N in-page anchors."""
@@ -105,8 +115,7 @@ def _decorate_for_inline(
         if rec is None:
             return m.group(0)
         if rec["kind"] == "pdf":
-            with Image.open(image_paths[cid]) as img:
-                image_w, image_h = img.width, img.height
+            image_w, image_h = image_dims[cid]
             attrs = build_cite_attrs(
                 {"cite_id": cid, "kind": "pdf", "spans": rec["spans"]},
                 image_filename=f"_inline_{cid}",
