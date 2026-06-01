@@ -28,3 +28,7 @@ qa-runs/
 
 # OS
 .DS_Store
+
+# Claude Skill build artifacts
+skill/wheels/*.whl
+skill/dist/
