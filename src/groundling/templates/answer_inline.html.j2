@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Grounded Answer</title>
+<style>
+  body { font: 16px/1.55 system-ui, sans-serif; color: #222; margin: 0; }
+  main.answer { padding: 32px 40px; max-width: 760px; margin: 0 auto; }
+  main.answer h1, main.answer h2, main.answer h3 { line-height: 1.25; }
+  main.answer p { margin: 0.8em 0; }
+  main.answer ul, main.answer ol { padding-left: 1.4em; }
+
+  a.cite {
+    background: #fff7c2;
+    border-bottom: 1px solid #e0c000;
+    text-decoration: none;
+    color: inherit;
+    padding: 0 2px;
+    position: relative;
+    cursor: pointer;
+  }
+  a.cite:hover { background: #ffeb80; }
+
+  a.cite .preview {
+    display: none;
+    position: absolute;
+    bottom: 1.6em; left: 0;
+    width: 480px; height: 280px;
+    border: 1px solid #bbb;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.2);
+    background-color: #fff;
+    background-repeat: no-repeat;
+    z-index: 100;
+    overflow: hidden;
+    border-radius: 4px;
+  }
+  a.cite:hover .preview { display: block; }
+  a.cite[data-kind="pdf"] .preview {
+    background-image: var(--img);
+    background-size: var(--img-w) var(--img-h);
+    background-position:
+      calc(240px - var(--bx) - var(--bw) / 2)
+      calc(140px - var(--by) - var(--bh) / 2);
+  }
+  a.cite[data-kind="pdf"] .preview::after {
+    content: "";
+    position: absolute;
+    left: calc(240px - var(--bw) / 2);
+    top:  calc(140px - var(--bh) / 2);
+    width: var(--bw); height: var(--bh);
+    background: rgba(255, 235, 0, 0.35);
+    border: 1px solid rgba(200, 160, 0, 0.6);
+  }
+
+  dialog.cite-detail {
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    padding: 16px;
+    max-width: 80vw;
+    max-height: 80vh;
+    overflow: auto;
+  }
+  dialog.cite-detail .pdf-image {
+    position: relative;
+    display: inline-block;
+  }
+  dialog.cite-detail img { display: block; max-width: 100%; }
+  dialog.cite-detail .highlight {
+    position: absolute;
+    background: rgba(255, 235, 0, 0.35);
+    border: 1px solid rgba(200, 160, 0, 0.6);
+    pointer-events: none;
+  }
+  dialog.cite-detail .quote {
+    border-left: 3px solid #ccc;
+    background: #fafafa;
+    padding: 8px 12px;
+    margin: 12px 0;
+  }
+  dialog.cite-detail .source { opacity: 0.6; font-size: 12px; }
+  dialog.cite-detail .close-btn {
+    position: absolute; top: 8px; right: 12px;
+    background: #fff; border: 1px solid #ccc; border-radius: 4px;
+    width: 28px; height: 28px; cursor: pointer;
+  }
+
+  @media (hover: none) { a.cite .preview { display: none !important; } }
+</style>
+</head>
+<body>
+<main class="answer">
+{{ answer_html | safe }}
+</main>
+
+{% for cite in inline_cites %}
+<dialog class="cite-detail" id="cite-{{ cite.cite_id }}-detail" data-cite-id="{{ cite.cite_id }}">
+  <button class="close-btn" aria-label="Close">×</button>
+  {% if cite.kind == "pdf" %}
+  <h3>Cite {{ cite.cite_id }} — {{ cite.filename }} (page {{ cite.page }})</h3>
+  {% if cite.claim %}<div class="quote"><strong>Claim:</strong> {{ cite.claim }}</div>{% endif %}
+  <div class="quote"><strong>Quote:</strong> {{ cite.quote }}</div>
+  <div class="pdf-image">
+    <img src="{{ cite.data_uri }}" alt="page {{ cite.page }}">
+    <div class="highlight" style="left: {{ cite.bx }}px; top: {{ cite.by }}px; width: {{ cite.bw }}px; height: {{ cite.bh }}px;"></div>
+  </div>
+  {% else %}
+  <h3>Cite {{ cite.cite_id }} — Web</h3>
+  {% if cite.claim %}<div class="quote"><strong>Claim:</strong> {{ cite.claim }}</div>{% endif %}
+  <div class="quote"><strong>Quote:</strong> {{ cite.quote }}</div>
+  <p class="source"><a href="{{ cite.url }}" target="_blank" rel="noopener">{{ cite.url }}</a></p>
+  {% endif %}
+</dialog>
+{% endfor %}
+
+<script>
+  (function () {
+    document.querySelectorAll('a.cite[data-kind="pdf"]').forEach(a => {
+      a.style.setProperty('--img', `url("${a.dataset.img}")`);
+      a.style.setProperty('--img-w', a.dataset.imgW + 'px');
+      a.style.setProperty('--img-h', a.dataset.imgH + 'px');
+      a.style.setProperty('--bx', a.dataset.bx + 'px');
+      a.style.setProperty('--by', a.dataset.by + 'px');
+      a.style.setProperty('--bw', a.dataset.bw + 'px');
+      a.style.setProperty('--bh', a.dataset.bh + 'px');
+    });
+    document.querySelectorAll('a.cite').forEach(a => {
+      a.addEventListener('click', e => {
+        const cid = a.dataset.citeId;
+        const dlg = document.getElementById(`cite-${cid}-detail`);
+        if (dlg) { e.preventDefault(); dlg.showModal(); }
+      });
+    });
+    document.querySelectorAll('dialog.cite-detail .close-btn').forEach(btn => {
+      btn.addEventListener('click', () => btn.closest('dialog').close());
+    });
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') {
+        document.querySelectorAll('dialog[open]').forEach(d => d.close());
+      }
+    });
+  })();
+</script>
+</body>
+</html>
