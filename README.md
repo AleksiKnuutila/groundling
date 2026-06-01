@@ -61,6 +61,26 @@ source PDF region; click to open the full cite page in a side pane.
 
 Run any command with `--help` for full flag listings.
 
+## Use as a Claude.ai Skill
+
+Groundling can run entirely inside Claude.ai's sandbox — no pipx
+install on your machine, no remote server. Upload the skill zip
+via Settings > Features > Skills, then ask questions about PDFs
+uploaded to a Project.
+
+Build the zip:
+
+    ./skill/build_wheels.sh
+    ./skill/smoke_skill.sh   # optional but recommended
+
+The zip is at `skill/dist/groundling-skill.zip` (~30MB, bundled
+wheels). Upload via Customize > Skills > Upload a skill.
+
+When you ask a question about a PDF in your project, Claude
+auto-invokes the skill, runs prep + render in the sandbox, and
+returns a self-contained `answer.html` with cite-span hover
+previews of the source PDF region.
+
 ## State on disk
 
 Per corpus directory:
