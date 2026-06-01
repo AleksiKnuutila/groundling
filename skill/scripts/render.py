@@ -34,6 +34,8 @@ def main():
     answer_md = args.answer.read_text(encoding="utf-8")
     markers = parse_markers(answer_md)
 
+    counters = {"validated": 0, "invalid_chunk": 0, "invalid_quote": 0, "invalid_url": 0}
+
     pdf_state = {}
 
     def _load_pdf_state(stem):
@@ -54,10 +56,16 @@ def main():
         if m.kind == "pdf":
             state = _load_pdf_state(m.pdf_stem)
             if state is None:
+                counters["invalid_chunk"] += 1
                 continue
             words, chunks, pdf_path = state
             spans = resolve_marker_to_spans(m, chunks, words)
             if spans is None:
+                # Distinguish chunk-not-found from quote-not-found.
+                if m.chunk_id not in {c["chunk_id"] for c in chunks}:
+                    counters["invalid_chunk"] += 1
+                else:
+                    counters["invalid_quote"] += 1
                 continue
             next_id += 1
             cite_records.append({
@@ -67,8 +75,10 @@ def main():
                 "claim_text": m.claim_text,
                 "pdf_filename": pdf_path.name,
             })
+            counters["validated"] += 1
         else:  # web
             if not (m.url and m.url.startswith(("http://", "https://"))):
+                counters["invalid_url"] += 1
                 continue
             next_id += 1
             cite_records.append({
@@ -77,6 +87,15 @@ def main():
                 "marker_quote": m.quote,
                 "claim_text": m.claim_text,
             })
+            counters["validated"] += 1
+
+    print(
+        f"validated={counters['validated']} "
+        f"invalid_chunk={counters['invalid_chunk']} "
+        f"invalid_quote={counters['invalid_quote']} "
+        f"invalid_url={counters['invalid_url']}",
+        file=sys.stderr,
+    )
 
     if not cite_records:
         print("error: zero valid cites in answer", file=sys.stderr)
@@ -136,8 +155,9 @@ def _rewrite_to_cite_scheme(answer_md, markers, cite_records):
                        + f'[{m.claim_text}](cite://{cid} "{quote_escaped}")'
                        + out[e:])
             else:
+                quote_escaped = m.quote.replace('"', '\\"')
                 out = (out[:s]
-                       + f'[{cid}](cite://{cid} "{m.quote}")'
+                       + f'[{cid}](cite://{cid} "{quote_escaped}")'
                        + out[e:])
         else:
             out = out[:s] + out[e:]
