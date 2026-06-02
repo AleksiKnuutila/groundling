@@ -65,20 +65,32 @@ def compute_excerpt(text: str, quote: str, window: int = 150) -> tuple[str, int]
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("--prep-dir", type=Path, required=True)
-    p.add_argument("--corpus", type=Path, required=True)
+    p.add_argument("--prep-dir", type=Path, default=None)
+    p.add_argument("--corpus", type=Path, default=None)
+    p.add_argument("--web-dir", type=Path, default=None)
     p.add_argument("--answer", type=Path, required=True)
     p.add_argument("--out", type=Path, required=True)
     args = p.parse_args()
 
+    if not args.prep_dir and not args.web_dir:
+        p.error("at least one of --prep-dir or --web-dir is required")
+    if args.prep_dir and not args.corpus:
+        p.error("--corpus is required when --prep-dir is given")
+
     answer_md = args.answer.read_text(encoding="utf-8")
     markers = parse_markers(answer_md)
 
-    counters = {"validated": 0, "invalid_chunk": 0, "invalid_quote": 0, "invalid_url": 0}
+    counters = {"validated": 0, "invalid_chunk": 0, "invalid_quote": 0,
+                "invalid_url": 0, "missing_evidence": 0,
+                "invalid_quote_web": 0}
+
+    web_evidence = load_web_evidence(args.web_dir) if args.web_dir else {}
 
     pdf_state = {}
 
     def _load_pdf_state(stem):
+        if args.prep_dir is None or args.corpus is None:
+            return None
         if stem in pdf_state:
             return pdf_state[stem]
         pdf_path = args.corpus / f"{stem}.pdf"
@@ -120,12 +132,24 @@ def main():
             if not (m.url and m.url.startswith(("http://", "https://"))):
                 counters["invalid_url"] += 1
                 continue
+            ev = web_evidence.get(m.url)
+            if ev is None:
+                counters["missing_evidence"] += 1
+                continue
+            if m.quote not in ev["extracted_text"]:
+                counters["invalid_quote_web"] += 1
+                continue
+            excerpt, q_off = compute_excerpt(ev["extracted_text"], m.quote)
             next_id += 1
             cite_records.append({
                 "marker": m, "cite_id": next_id, "kind": "web",
                 "url": m.url,
+                "title": ev["title"],
+                "fetched_at": ev["fetched_at"],
                 "marker_quote": m.quote,
                 "claim_text": m.claim_text,
+                "excerpt": excerpt,
+                "quote_offset_in_excerpt": q_off,
             })
             counters["validated"] += 1
 
@@ -133,7 +157,9 @@ def main():
         f"validated={counters['validated']} "
         f"invalid_chunk={counters['invalid_chunk']} "
         f"invalid_quote={counters['invalid_quote']} "
-        f"invalid_url={counters['invalid_url']}",
+        f"invalid_url={counters['invalid_url']} "
+        f"missing_evidence={counters['missing_evidence']} "
+        f"invalid_quote_web={counters['invalid_quote_web']}",
         file=sys.stderr,
     )
 
