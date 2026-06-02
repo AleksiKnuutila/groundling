@@ -35,6 +35,9 @@ def _build_excerpt_html(excerpt: str, quote: str, q_off: int) -> str:
     """Server-side splice: HTML-escape excerpt, wrap quote span in <mark>.
 
     Caller must ensure `excerpt[q_off : q_off+len(quote)] == quote`."""
+    assert excerpt[q_off : q_off + len(quote)] == quote, (
+        "quote offset does not match excerpt content"
+    )
     before = html_lib.escape(excerpt[:q_off])
     middle = html_lib.escape(quote)
     after = html_lib.escape(excerpt[q_off + len(quote):])
@@ -76,6 +79,7 @@ def build_inline_answer_html(
         slot_by_cite[cid] = path_to_slot[path]
 
     inline_cites = []
+    excerpt_html_by_id: dict[int, str] = {}
     for rec in cite_records:
         cid = rec["cite_id"]
         if rec["kind"] == "pdf":
@@ -106,8 +110,7 @@ def build_inline_answer_html(
                 rec["excerpt"], rec["marker_quote"],
                 rec["quote_offset_in_excerpt"],
             )
-            # Stash on rec so _decorate_for_inline can find it.
-            rec["excerpt_html"] = excerpt_html
+            excerpt_html_by_id[cid] = excerpt_html
             inline_cites.append({
                 "cite_id": cid, "kind": "web",
                 "url": rec["url"],
@@ -121,6 +124,7 @@ def build_inline_answer_html(
     decorated_body = _decorate_for_inline(
         answer_md, cite_records,
         slot_by_cite=slot_by_cite, image_dims=image_dims, scale=scale,
+        excerpt_html_by_id=excerpt_html_by_id,
     )
     template = _env.get_template("answer_inline.html.j2")
     return template.render(
@@ -132,6 +136,7 @@ def build_inline_answer_html(
 
 def _decorate_for_inline(
     answer_md, cite_records, *, slot_by_cite, image_dims, scale,
+    excerpt_html_by_id: dict[int, str],
 ):
     """Render markdown to HTML; decorate cite anchors with data-* attrs
     and rewrite cite://N hrefs to #cite-N in-page anchors.
@@ -177,7 +182,7 @@ def _decorate_for_inline(
         if rec["kind"] == "web":
             preview = (
                 f'<span class="preview preview-text">'
-                f'{rec["excerpt_html"]}</span>'
+                f'{excerpt_html_by_id[cid]}</span>'
             )
         else:
             preview = '<span class="preview"></span>'

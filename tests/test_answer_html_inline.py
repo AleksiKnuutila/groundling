@@ -242,7 +242,7 @@ def test_inline_html_web_cite_escapes_excerpt_html(tmp_path):
         "fetched_at": "2026-06-02T00:00:00Z",
         "marker_quote": "x", "claim_text": "c",
         "excerpt": "<script>evil()</script> x rest",
-        "quote_offset_in_excerpt": 23,
+        "quote_offset_in_excerpt": 24,
     }]
     html = build_inline_answer_html(
         answer_md='[c](cite://1 "x")', cite_records=cite_records,
@@ -303,3 +303,11 @@ def test_inline_html_web_cite_has_css(tmp_path):
     # Globe icon selector + popover class in the stylesheet.
     assert 'a.cite[data-kind="web"]::before' in html
     assert ".preview-text" in html
+
+
+def test_build_excerpt_html_asserts_quote_at_offset():
+    """Wrong q_off must fail loudly, not produce silently-wrong HTML."""
+    from groundling.answer_html_inline import _build_excerpt_html
+    import pytest
+    with pytest.raises(AssertionError):
+        _build_excerpt_html("before quote after", "quote", q_off=0)
