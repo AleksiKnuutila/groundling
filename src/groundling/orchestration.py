@@ -120,7 +120,13 @@ def run_ask(
     docs_by_idx = {i: e for i, e in enumerate(entries)}
 
     if client is None:
-        from anthropic import Anthropic
+        try:
+            from anthropic import Anthropic
+        except ImportError as exc:
+            raise ImportError(
+                "groundling Mode A (`ask`) needs the anthropic package. "
+                "Install with: pip install 'groundling[api]'"
+            ) from exc
         from dotenv import load_dotenv
         load_dotenv()
         client = Anthropic()

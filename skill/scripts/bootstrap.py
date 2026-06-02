@@ -37,9 +37,14 @@ def main():
         if not wheels.exists() or not list(wheels.glob("*.whl")):
             print(f"error: no wheels in {wheels}", file=sys.stderr)
             sys.exit(1)
+        # --break-system-packages: the Anthropic code-exec sandbox uses
+        # a PEP 668 externally-managed system Python; pip refuses to
+        # install without this flag. Safe here because the sandbox is
+        # ephemeral — we're not corrupting a long-lived environment.
         subprocess.run(
             [sys.executable, "-m", "pip", "install", "--no-index",
-             "--find-links", str(wheels), "groundling"],
+             "--find-links", str(wheels), "--break-system-packages",
+             "groundling"],
             check=True,
         )
         print("groundling installed.")
