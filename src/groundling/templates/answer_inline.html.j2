@@ -85,6 +85,39 @@
     width: 28px; height: 28px; cursor: pointer;
   }
 
+  a.cite[data-kind="web"]::before {
+    content: "🌐";
+    font-size: 0.75em;
+    margin-right: 2px;
+    opacity: 0.7;
+  }
+  a.cite .preview-text {
+    display: none;
+    position: absolute;
+    bottom: 1.6em; left: 0;
+    width: 360px;
+    max-height: 200px;
+    overflow: auto;
+    padding: 8px 10px;
+    border: 1px solid #bbb;
+    border-radius: 4px;
+    background: #fff;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.2);
+    font-size: 14px;
+    line-height: 1.5;
+    color: #333;
+    z-index: 100;
+    /* Override the .preview defaults so this isn't bg-image sized. */
+    height: auto;
+  }
+  a.cite:hover .preview-text { display: block; }
+  a.cite mark, dialog.cite-detail mark {
+    background: #fff200;
+    padding: 0 2px;
+  }
+  dialog.cite-detail .excerpt-quote { font-style: normal; }
+  dialog.cite-detail .fetched-at { opacity: 0.55; font-size: 12px; }
+
   @media (hover: none) { a.cite .preview { display: none !important; } }
 </style>
 </head>
@@ -105,10 +138,13 @@
     <div class="highlight" style="left: {{ cite.bx_pct }}%; top: {{ cite.by_pct }}%; width: {{ cite.bw_pct }}%; height: {{ cite.bh_pct }}%;"></div>
   </div>
   {% else %}
-  <h3>Cite {{ cite.cite_id }} — Web</h3>
+  <h3>Cite {{ cite.cite_id }} — {{ cite.title }}</h3>
   {% if cite.claim %}<div class="quote"><strong>Claim:</strong> {{ cite.claim }}</div>{% endif %}
-  <div class="quote"><strong>Quote:</strong> {{ cite.quote }}</div>
-  <p class="source"><a href="{{ cite.url }}" target="_blank" rel="noopener">{{ cite.url }}</a></p>
+  <div class="quote excerpt-quote">{{ cite.excerpt_html | safe }}</div>
+  <p class="source">
+    <a href="{{ cite.url }}" target="_blank" rel="noopener">{{ cite.url }}</a>
+    <span class="fetched-at"> (fetched {{ cite.fetched_at }})</span>
+  </p>
   {% endif %}
 </dialog>
 {% endfor %}

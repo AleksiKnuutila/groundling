@@ -31,6 +31,16 @@ def _png_to_data_uri(path: Path) -> str:
     return f"data:image/png;base64,{encoded}"
 
 
+def _build_excerpt_html(excerpt: str, quote: str, q_off: int) -> str:
+    """Server-side splice: HTML-escape excerpt, wrap quote span in <mark>.
+
+    Caller must ensure `excerpt[q_off : q_off+len(quote)] == quote`."""
+    before = html_lib.escape(excerpt[:q_off])
+    middle = html_lib.escape(quote)
+    after = html_lib.escape(excerpt[q_off + len(quote):])
+    return f"{before}<mark>{middle}</mark>{after}"
+
+
 def build_inline_answer_html(
     *,
     answer_md: str,
@@ -91,12 +101,21 @@ def build_inline_answer_html(
                 "filename": rec.get("pdf_filename", ""),
                 "page": rec["spans"][0]["page"],
             })
-        else:
+        else:  # web
+            excerpt_html = _build_excerpt_html(
+                rec["excerpt"], rec["marker_quote"],
+                rec["quote_offset_in_excerpt"],
+            )
+            # Stash on rec so _decorate_for_inline can find it.
+            rec["excerpt_html"] = excerpt_html
             inline_cites.append({
                 "cite_id": cid, "kind": "web",
                 "url": rec["url"],
+                "title": rec["title"],
+                "fetched_at": rec["fetched_at"],
                 "quote": rec["marker_quote"],
                 "claim": rec.get("claim_text") or "",
+                "excerpt_html": excerpt_html,
             })
 
     decorated_body = _decorate_for_inline(
@@ -155,9 +174,16 @@ def _decorate_for_inline(
             f'{k}="{html_lib.escape(v, quote=True)}"'
             for k, v in attrs.items()
         )
+        if rec["kind"] == "web":
+            preview = (
+                f'<span class="preview preview-text">'
+                f'{rec["excerpt_html"]}</span>'
+            )
+        else:
+            preview = '<span class="preview"></span>'
         return (
             f'<a class="cite" href="#cite-{cid}"{rest} {attrs_str}>'
-            f'{inner}<span class="preview"></span></a>'
+            f'{inner}{preview}</a>'
         )
 
     return anchor_re.sub(_replace, rendered)

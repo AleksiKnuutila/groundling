@@ -66,8 +66,12 @@ def test_inline_html_handles_web_cites(tmp_path):
     cite_records = [{
         "cite_id": 1, "kind": "web",
         "url": "https://example.com/news",
+        "title": "News Article",
+        "fetched_at": "2026-06-02T00:00:00Z",
         "marker_quote": "the quoted web text",
         "claim_text": "the claim from web",
+        "excerpt": "before the quoted web text after",
+        "quote_offset_in_excerpt": 7,
     }]
     html = build_inline_answer_html(
         answer_md='[c](cite://1 "the quoted web text")',
@@ -181,3 +185,121 @@ def test_inline_html_size_bounded(tmp_path):
         image_dims={1: (1, 1)}, scale=2.0,
     )
     assert len(html) < 50_000
+
+
+def test_inline_html_web_cite_renders_excerpt_with_mark(tmp_path):
+    cite_records = [{
+        "cite_id": 1, "kind": "web",
+        "url": "https://example.com/a",
+        "title": "Article A",
+        "fetched_at": "2026-06-02T00:00:00Z",
+        "marker_quote": "the quote",
+        "claim_text": "a claim",
+        "excerpt": "before the quote after",
+        "quote_offset_in_excerpt": 7,
+    }]
+    html = build_inline_answer_html(
+        answer_md='[c](cite://1 "the quote")',
+        cite_records=cite_records, image_paths={},
+        image_dims={}, scale=2.0,
+    )
+    # Excerpt appears with <mark> around the quote span (in dialog AND
+    # in the hover preview span).
+    assert "before <mark>the quote</mark> after" in html
+    # fetched_at is surfaced.
+    assert "2026-06-02" in html
+    # Live URL is linked.
+    assert 'href="https://example.com/a"' in html
+    # Article title is surfaced in the dialog header.
+    assert "Article A" in html
+
+
+def test_inline_html_web_cite_does_not_inflate_img_registry(tmp_path):
+    """Web cites must not allocate image slots (no PDF page PNGs)."""
+    cite_records = [{
+        "cite_id": 1, "kind": "web",
+        "url": "https://example.com/a", "title": "A",
+        "fetched_at": "2026-06-02T00:00:00Z",
+        "marker_quote": "q", "claim_text": "c",
+        "excerpt": "before q after",
+        "quote_offset_in_excerpt": 7,
+    }]
+    html = build_inline_answer_html(
+        answer_md='[c](cite://1 "q")', cite_records=cite_records,
+        image_paths={}, image_dims={}, scale=2.0,
+    )
+    # Empty registry — no base64 PNG bytes anywhere.
+    assert "window.IMG_REGISTRY = []" in html
+    assert "data:image/png;base64," not in html
+
+
+def test_inline_html_web_cite_escapes_excerpt_html(tmp_path):
+    """A `<script>` in the excerpt must be HTML-escaped, but the
+    server-side <mark> splice around the quote still renders."""
+    cite_records = [{
+        "cite_id": 1, "kind": "web",
+        "url": "https://example.com/a", "title": "A",
+        "fetched_at": "2026-06-02T00:00:00Z",
+        "marker_quote": "x", "claim_text": "c",
+        "excerpt": "<script>evil()</script> x rest",
+        "quote_offset_in_excerpt": 23,
+    }]
+    html = build_inline_answer_html(
+        answer_md='[c](cite://1 "x")', cite_records=cite_records,
+        image_paths={}, image_dims={}, scale=2.0,
+    )
+    assert "&lt;script&gt;evil()&lt;/script&gt;" in html
+    # The <mark>x</mark> splice around the literal quote position
+    # still renders as actual HTML, not escaped.
+    assert "<mark>x</mark>" in html
+
+
+def test_inline_html_web_cite_has_hover_preview(tmp_path):
+    cite_records = [{
+        "cite_id": 1, "kind": "web",
+        "url": "https://example.com/a", "title": "A",
+        "fetched_at": "2026-06-02T00:00:00Z",
+        "marker_quote": "q", "claim_text": "c",
+        "excerpt": "before q after", "quote_offset_in_excerpt": 7,
+    }]
+    html = build_inline_answer_html(
+        answer_md='[c](cite://1 "q")', cite_records=cite_records,
+        image_paths={}, image_dims={}, scale=2.0,
+    )
+    # The cite anchor has a preview-text span carrying excerpt_html.
+    assert 'class="preview preview-text"' in html
+
+
+def test_inline_html_web_cite_deep_link_still_works(tmp_path):
+    """A web cite's #cite-N hash link opens the dialog the same way
+    PDF cites do."""
+    cite_records = [{
+        "cite_id": 1, "kind": "web",
+        "url": "https://example.com/a", "title": "A",
+        "fetched_at": "2026-06-02T00:00:00Z",
+        "marker_quote": "q", "claim_text": "c",
+        "excerpt": "before q after", "quote_offset_in_excerpt": 7,
+    }]
+    html = build_inline_answer_html(
+        answer_md='[c](cite://1 "q")', cite_records=cite_records,
+        image_paths={}, image_dims={}, scale=2.0,
+    )
+    assert 'id="cite-1"' in html
+    assert "window.location.hash.match" in html
+
+
+def test_inline_html_web_cite_has_css(tmp_path):
+    cite_records = [{
+        "cite_id": 1, "kind": "web",
+        "url": "https://example.com/a", "title": "A",
+        "fetched_at": "2026-06-02T00:00:00Z",
+        "marker_quote": "q", "claim_text": "c",
+        "excerpt": "before q after", "quote_offset_in_excerpt": 7,
+    }]
+    html = build_inline_answer_html(
+        answer_md='[c](cite://1 "q")', cite_records=cite_records,
+        image_paths={}, image_dims={}, scale=2.0,
+    )
+    # Globe icon selector + popover class in the stylesheet.
+    assert 'a.cite[data-kind="web"]::before' in html
+    assert ".preview-text" in html
