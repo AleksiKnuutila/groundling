@@ -1,14 +1,15 @@
 ---
 name: groundling
-description: Grounded Q&A over PDFs uploaded to a Project, optionally extended with web sources. Produces a self-contained HTML artifact with cite spans that show source passages on hover and open a full PDF-page view on click. Use when the user asks a question that requires verifiable citations from uploaded PDF documents — even casually (like "what does the report say about X" when PDFs are in scope). Do NOT trigger for ungrounded summarisation, for non-PDF documents (use docx/xlsx skills for those), or when the user explicitly asks for an answer without citations.
+description: Grounded Q&A over PDFs uploaded to a Project and/or web sources fetched via web_search / web_fetch. Produces a self-contained HTML artifact with cite spans that show source passages on hover and open a full PDF-page view (or source URL) on click. Use when the user asks a question that requires verifiable citations from uploaded PDF documents or web sources — even casually (like "what does the report say about X" when PDFs are in scope, or "what's the latest reporting on Y" when web search is available). Do NOT trigger for ungrounded summarisation, for non-PDF local documents (use docx/xlsx skills for those), or when the user explicitly asks for an answer without citations.
 ---
 
 # Groundling — grounded PDF Q&A
 
-Produces a verifiable answer to a question grounded in uploaded PDFs.
-The output is a single self-contained `answer.html` the user can open
-as an artifact; cite spans on hover show the source PDF region with
-the cited passage highlighted.
+Produces a verifiable answer to a question grounded in uploaded PDFs
+and/or web sources. The output is a single self-contained
+`answer.html` the user can open as an artifact; cite spans on hover
+show the source PDF region (or a snippet of the web page) with the
+cited passage highlighted.
 
 Bundled wheels in `wheels/` make this work in any sandbox network
 setting — no PyPI access required.
@@ -30,6 +31,43 @@ Use bash to locate uploaded PDFs in the sandbox. Common locations vary
 by surface; check the working directory first, then `/mnt/user-data/`
 or similar attachment paths. Pass the directory containing the PDFs to
 prep.
+
+### Step 2b: Web evidence deposit (if using web sources)
+
+For each web source you intend to cite, deposit one JSON evidence
+file in `/tmp/groundling-web/` so the renderer can validate quotes
+against it. Use sequential numeric filenames (`01.json`, `02.json`,
+...).
+
+```bash
+mkdir -p /tmp/groundling-web
+cat > /tmp/groundling-web/01.json <<'EOF'
+{
+  "url": "https://example.com/article",
+  "title": "Article Title",
+  "fetched_at": "2026-06-02T14:30:00Z",
+  "extracted_text": "<verbatim copy of the readable text you got back from web_search / web_fetch>"
+}
+EOF
+```
+
+Critical rules:
+
+- **Copy `extracted_text` verbatim** from your web tool result. Do
+  not paraphrase, summarize, or truncate. The renderer validates
+  that every cited quote is a verbatim substring of this text —
+  any deviation will fail validation and drop the cite.
+- **Use the same URL string in the marker and the evidence file.**
+  Differences in trailing slashes, `?utm=` params, or `www.`
+  prefix will cause the cite to be dropped with a
+  `missing_evidence` counter.
+- **Only deposit sources you will actually cite.** Speculative
+  deposits waste sandbox space; the renderer ignores unused
+  evidence files but they consume disk.
+- **If the search snippet is too short to contain the quote you
+  want, call `web_fetch` for the full content first.** A
+  `web_search` result may only show a few sentences; deposit
+  evidence based on the longer `web_fetch` body.
 
 ### Step 3: Prep (cache-aware)
 
@@ -67,7 +105,7 @@ specific claim a cite supports:
 
 The link text is the precise span of your answer that this citation
 grounds. The quote in the title attribute MUST be a verbatim
-substring of the cited chunk's text.
+substring of the cited source's text.
 
 **Point (footnote):** when the claim is the whole preceding sentence
 and pulling out a fragment would feel artificial.
@@ -75,25 +113,43 @@ and pulling out a fragment would feel artificial.
     [chunk=<pdf-stem>:<chunk_id> quote="exact verbatim quote"]
     [url="https://full-url" quote="exact verbatim quote"]
 
-See `reference.md` for marker validation rules and edge cases.
+Validation rules — the same two forms apply to both schemes, and the
+renderer enforces:
+
+- `chunk://` — the chunk ID must resolve in the prep dir; the quote
+  must be a verbatim substring of that chunk's text.
+- `web://` — the URL must match (exactly, byte-for-byte) a `url`
+  field in some `/tmp/groundling-web/*.json` evidence file; the
+  quote must be a verbatim substring of that file's
+  `extracted_text`. A URL with no matching evidence file is dropped
+  under `missing_evidence`; a mismatched quote is dropped under
+  `invalid_quote_web`.
+
+See `reference.md` for further marker validation rules and edge
+cases.
 
 ### Step 5: Render
 
 Validate markers and produce the single-file HTML. The script prints
 counters to stderr like
-`validated=9 invalid_chunk=0 invalid_quote=0 invalid_url=0` — if any
-marker fails validation, re-read the chunk text and fix the quote.
+`validated=9 invalid_chunk=0 invalid_quote=0 invalid_url=0 missing_evidence=0 invalid_quote_web=0`
+— if any marker fails validation, re-read the chunk / web evidence
+text and fix the quote (or, for `missing_evidence`, fix the URL or
+deposit the missing evidence file).
 
 Exit code 5 means zero markers survived validation — your answer is
 ungrounded, rewrite it.
 
 ```bash
 python /skills/groundling/scripts/render.py \
-    --prep-dir /tmp/groundling-prep \
-    --corpus <pdf-dir> \
+    [--prep-dir /tmp/groundling-prep --corpus <pdf-dir>] \
+    [--web-dir /tmp/groundling-web] \
     --answer /tmp/answer.md \
     --out /tmp/answer.html
 ```
+
+At least one of `--prep-dir` (with `--corpus`) or `--web-dir` must
+be present. Pass both when the answer mixes PDF and web cites.
 
 ### Step 6: Surface to user
 
