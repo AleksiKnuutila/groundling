@@ -68,12 +68,12 @@ no pipx install on the user's machine, no hosted server. The skill
 is the same artifact (a zip with bundled wheels) for all three
 Claude surfaces; the install mechanism differs.
 
-Pre-built zip: download `groundling-skill-vX.Y.Z.zip` from the
-[latest GitHub Release](https://github.com/AleksiKnuutila/groundling/releases),
+Pre-built zip: download `groundling-skill.zip` from the
+[latest GitHub Release](https://github.com/AleksiKnuutila/groundling/releases/latest),
 or build it from source:
 
-    ./skill/build_zip.sh v0.1.0
-    # produces skill/dist/groundling-skill-v0.1.0.zip (~30MB)
+    ./skill/build_zip.sh v0.1.1
+    # produces skill/dist/groundling-skill-v0.1.1.zip + groundling-skill.zip
 
 ### Claude.ai web (Pro / Max / Team / Enterprise)
 
@@ -87,7 +87,7 @@ or build it from source:
 import anthropic
 
 client = anthropic.Anthropic()
-with open("groundling-skill-v0.1.0.zip", "rb") as f:
+with open("groundling-skill.zip", "rb") as f:
     skill = client.beta.skills.create(
         display_title="groundling",
         files=[("groundling-skill.zip", f, "application/zip")],
@@ -106,7 +106,7 @@ See `skill/api_smoke.py` for a complete end-to-end example
 mkdir -p ~/.claude/skills
 cd ~/.claude/skills
 curl -L \
-  https://github.com/AleksiKnuutila/groundling/releases/latest/download/groundling-skill-v0.1.0.zip \
+  https://github.com/AleksiKnuutila/groundling/releases/latest/download/groundling-skill.zip \
   -o tmp.zip
 unzip tmp.zip && rm tmp.zip
 # ~/.claude/skills/groundling/ now contains SKILL.md + scripts + wheels

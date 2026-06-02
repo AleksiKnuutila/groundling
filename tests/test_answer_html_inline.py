@@ -141,6 +141,30 @@ def test_inline_html_dedupes_per_unique_page(tmp_path):
     assert html.count("data:image/png;base64,") == 2
 
 
+def test_inline_html_supports_hash_deep_link(tmp_path):
+    """The output must contain the JS that opens a cite dialog when
+    the page loads with #cite-N in the URL hash. Lets chat markdown
+    like `[3](answer.html#cite-3)` jump straight to verification."""
+    fake_png = tmp_path / "1.png"
+    fake_png.write_bytes(TINY_PNG)
+    cite_records = [{
+        "cite_id": 1, "kind": "pdf",
+        "spans": [{"page": 1, "bbox": [10.0, 20.0, 30.0, 40.0]}],
+        "marker_quote": "q", "claim_text": "c",
+        "pdf_filename": "doc.pdf",
+    }]
+    html = build_inline_answer_html(
+        answer_md='[c](cite://1 "q")',
+        cite_records=cite_records, image_paths={1: fake_png},
+        image_dims={1: (1, 1)}, scale=2.0,
+    )
+    # The deep-link handler reads window.location.hash and opens
+    # the matching <dialog>. Pin the load-bearing regex + showModal call.
+    assert "window.location.hash.match" in html
+    assert "#cite-" in html  # the regex literal
+    assert "showModal" in html
+
+
 def test_inline_html_size_bounded(tmp_path):
     """Sanity check: 1-cite output should be <50KB."""
     fake_png = tmp_path / "1.png"

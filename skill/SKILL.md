@@ -98,6 +98,13 @@ python /skills/groundling/scripts/render.py \
 ### Step 6: Surface to user
 
 Print the answer markdown to the conversation, with cite markers
-rewritten to `[N]` superscript-style references (the markdown body
-should read cleanly, not as raw markers). Attach `/tmp/answer.html`
-as a file artifact so the user can open it inline.
+rewritten to clickable deep links into the HTML artifact:
+
+    Operating revenue was RMB 170 billion [[1]](answer.html#cite-1).
+
+The link target is the artifact filename + a `#cite-N` fragment;
+answer.html's JS opens the matching cite dialog on load. Reads
+cleanly in chat, jumps straight to the source preview when clicked.
+
+Attach `/tmp/answer.html` as a file artifact so the user can open
+it inline.

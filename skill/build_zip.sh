@@ -46,6 +46,14 @@ mkdir -p skill/dist
 rm -f "$ZIP"
 ( cd "$STAGE" && zip -qr "$ZIP" groundling )
 
+# Also emit a stable-named copy for `releases/latest/download/`
+# install URLs that don't have to be bumped per release.
+if [ -n "$VERSION" ]; then
+    STABLE="$REPO_ROOT/skill/dist/groundling-skill.zip"
+    cp "$ZIP" "$STABLE"
+    echo "Also wrote $STABLE"
+fi
+
 echo ""
 echo "Built $ZIP"
 du -h "$ZIP"

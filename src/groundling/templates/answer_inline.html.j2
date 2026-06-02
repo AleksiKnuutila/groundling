@@ -150,6 +150,14 @@
         document.querySelectorAll('dialog[open]').forEach(d => d.close());
       }
     });
+    // Deep-link support: if the page loads with #cite-N in the URL,
+    // open that cite's dialog. Lets chat markdown like
+    // `[3](answer.html#cite-3)` jump straight to the verification view.
+    const hashMatch = window.location.hash.match(/^#cite-(\d+)$/);
+    if (hashMatch) {
+      const dlg = document.getElementById(`cite-${hashMatch[1]}`);
+      if (dlg && dlg.tagName === 'DIALOG') dlg.showModal();
+    }
   })();
 </script>
 </body>
