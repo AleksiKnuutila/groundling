@@ -169,6 +169,33 @@ def test_inline_html_supports_hash_deep_link(tmp_path):
     assert "showModal" in html
 
 
+def test_inline_html_cite_anchor_has_no_href(tmp_path):
+    """In-page cite anchors must NOT carry href="#cite-N" — inside
+    Claude.ai's artifact iframe, navigating to a fragment bubbles to
+    the parent frame and tries to navigate claudeusercontent.com.
+    Anchors are role=button with tabindex=0 instead; the dialog opens
+    via JS click handler. Deep links from chat still work because
+    they're driven by window.location.hash on load, not in-page hrefs."""
+    fake_png = tmp_path / "1.png"
+    fake_png.write_bytes(TINY_PNG)
+    cite_records = [{
+        "cite_id": 1, "kind": "pdf",
+        "spans": [{"page": 1, "bbox": [10.0, 20.0, 30.0, 40.0]}],
+        "marker_quote": "q", "claim_text": "c",
+        "pdf_filename": "doc.pdf",
+    }]
+    html = build_inline_answer_html(
+        answer_md='[c](cite://1 "q")',
+        cite_records=cite_records, image_paths={1: fake_png},
+        image_dims={1: (1, 1)}, scale=2.0,
+    )
+    # No fragment href on the in-page cite anchor.
+    assert 'href="#cite-' not in html
+    # Keyboard-accessible without href.
+    assert 'role="button"' in html
+    assert 'tabindex="0"' in html
+
+
 def test_inline_html_size_bounded(tmp_path):
     """Sanity check: 1-cite output should be <50KB."""
     fake_png = tmp_path / "1.png"

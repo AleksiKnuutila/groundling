@@ -172,10 +172,14 @@
       img.src = REGISTRY[img.dataset.imgSlot];
     });
     document.querySelectorAll('a.cite').forEach(a => {
-      a.addEventListener('click', e => {
+      const open = e => {
         const cid = a.dataset.citeId;
         const dlg = document.getElementById(`cite-${cid}`);
         if (dlg) { e.preventDefault(); dlg.showModal(); }
+      };
+      a.addEventListener('click', open);
+      a.addEventListener('keydown', e => {
+        if (e.key === 'Enter' || e.key === ' ') open(e);
       });
     });
     document.querySelectorAll('dialog.cite-detail .close-btn').forEach(btn => {

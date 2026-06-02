@@ -186,9 +186,13 @@ def _decorate_for_inline(
             )
         else:
             preview = '<span class="preview"></span>'
+        # No href: navigating to #cite-N inside the Claude.ai artifact
+        # iframe bubbles a fragment change to the parent frame, which
+        # tries to navigate claudeusercontent.com instead of opening
+        # the dialog. role+tabindex preserve keyboard a11y.
         return (
-            f'<a class="cite" href="#cite-{cid}"{rest} {attrs_str}>'
-            f'{inner}{preview}</a>'
+            f'<a class="cite" role="button" tabindex="0"{rest} '
+            f'{attrs_str}>{inner}{preview}</a>'
         )
 
     return anchor_re.sub(_replace, rendered)
