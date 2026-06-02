@@ -21,7 +21,7 @@ Run once per sandbox lifetime. Idempotent — a sentinel file at
 `/tmp/.groundling-installed` skips re-install on subsequent runs.
 
 ```bash
-python ${CLAUDE_SKILL_DIR}/scripts/bootstrap.py
+python /skills/groundling/scripts/bootstrap.py
 ```
 
 ### Step 2: Find the user's PDFs
@@ -38,7 +38,7 @@ Build per-PDF chunks and linearized text. The output dir is
 exists from an earlier turn in this conversation.
 
 ```bash
-python ${CLAUDE_SKILL_DIR}/scripts/prep.py \
+python /skills/groundling/scripts/prep.py \
     --corpus <pdf-dir> \
     --out /tmp/groundling-prep
 ```
@@ -88,7 +88,7 @@ Exit code 5 means zero markers survived validation — your answer is
 ungrounded, rewrite it.
 
 ```bash
-python ${CLAUDE_SKILL_DIR}/scripts/render.py \
+python /skills/groundling/scripts/render.py \
     --prep-dir /tmp/groundling-prep \
     --corpus <pdf-dir> \
     --answer /tmp/answer.md \

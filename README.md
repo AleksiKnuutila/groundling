@@ -61,25 +61,61 @@ source PDF region; click to open the full cite page in a side pane.
 
 Run any command with `--help` for full flag listings.
 
-## Use as a Claude.ai Skill
+## Use as a Claude Skill
 
-Groundling can run entirely inside Claude.ai's sandbox — no pipx
-install on your machine, no remote server. Upload the skill zip
-via Settings > Features > Skills, then ask questions about PDFs
-uploaded to a Project.
+Groundling can run entirely inside Claude's code-execution sandbox —
+no pipx install on the user's machine, no hosted server. The skill
+is the same artifact (a zip with bundled wheels) for all three
+Claude surfaces; the install mechanism differs.
 
-Build the zip:
+Pre-built zip: download `groundling-skill-vX.Y.Z.zip` from the
+[latest GitHub Release](https://github.com/AleksiKnuutila/groundling/releases),
+or build it from source:
 
-    ./skill/build_wheels.sh
-    ./skill/smoke_skill.sh   # optional but recommended
+    ./skill/build_zip.sh v0.1.0
+    # produces skill/dist/groundling-skill-v0.1.0.zip (~30MB)
 
-The zip is at `skill/dist/groundling-skill.zip` (~30MB, bundled
-wheels). Upload via Customize > Skills > Upload a skill.
+### Claude.ai web (Pro / Max / Team / Enterprise)
 
-When you ask a question about a PDF in your project, Claude
-auto-invokes the skill, runs prep + render in the sandbox, and
-returns a self-contained `answer.html` with cite-span hover
-previews of the source PDF region.
+1. Download the zip
+2. In Claude.ai → Settings > Features > Skills > Create skill → Upload a skill
+3. Upload the zip; Claude auto-invokes when you ask about PDFs in a Project
+
+### Claude API
+
+```python
+import anthropic
+
+client = anthropic.Anthropic()
+with open("groundling-skill-v0.1.0.zip", "rb") as f:
+    skill = client.beta.skills.create(
+        display_title="groundling",
+        files=[("groundling-skill.zip", f, "application/zip")],
+        betas=["skills-2025-10-02"],
+    )
+
+# Then reference skill.id in messages.create(container={"skills": [...]})
+```
+
+See `skill/api_smoke.py` for a complete end-to-end example
+(upload PDF, invoke skill, retrieve generated `answer.html`).
+
+### Claude Code
+
+```
+mkdir -p ~/.claude/skills
+cd ~/.claude/skills
+curl -L \
+  https://github.com/AleksiKnuutila/groundling/releases/latest/download/groundling-skill-v0.1.0.zip \
+  -o tmp.zip
+unzip tmp.zip && rm tmp.zip
+# ~/.claude/skills/groundling/ now contains SKILL.md + scripts + wheels
+```
+
+When you ask a question about a PDF, Claude reads `SKILL.md`,
+bootstraps (pip-installs from bundled wheels into the sandbox),
+runs prep + render, and surfaces a self-contained `answer.html`
+with cite-span hover previews of the source PDF region.
 
 ## State on disk
 
