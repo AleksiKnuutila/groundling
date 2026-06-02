@@ -101,7 +101,7 @@
   {% if cite.claim %}<div class="quote"><strong>Claim:</strong> {{ cite.claim }}</div>{% endif %}
   <div class="quote"><strong>Quote:</strong> {{ cite.quote }}</div>
   <div class="pdf-image">
-    <img src="{{ cite.data_uri }}" alt="page {{ cite.page }}">
+    <img data-img-slot="{{ cite.slot }}" alt="page {{ cite.page }}">
     <div class="highlight" style="left: {{ cite.bx_pct }}%; top: {{ cite.by_pct }}%; width: {{ cite.bw_pct }}%; height: {{ cite.bh_pct }}%;"></div>
   </div>
   {% else %}
@@ -114,15 +114,26 @@
 {% endfor %}
 
 <script>
+  // Shared image registry — each unique cited page PNG is base64
+  // encoded exactly once here. Cite anchors and dialog <img> elements
+  // reference it by slot id via `data-img-slot`.
+  window.IMG_REGISTRY = {{ image_slots_json | safe }};
+</script>
+<script>
   (function () {
+    const REGISTRY = window.IMG_REGISTRY;
     document.querySelectorAll('a.cite[data-kind="pdf"]').forEach(a => {
-      a.style.setProperty('--img', `url("${a.dataset.img}")`);
+      const src = REGISTRY[a.dataset.imgSlot];
+      a.style.setProperty('--img', `url("${src}")`);
       a.style.setProperty('--img-w', a.dataset.imgW + 'px');
       a.style.setProperty('--img-h', a.dataset.imgH + 'px');
       a.style.setProperty('--bx', a.dataset.bx + 'px');
       a.style.setProperty('--by', a.dataset.by + 'px');
       a.style.setProperty('--bw', a.dataset.bw + 'px');
       a.style.setProperty('--bh', a.dataset.bh + 'px');
+    });
+    document.querySelectorAll('dialog.cite-detail img[data-img-slot]').forEach(img => {
+      img.src = REGISTRY[img.dataset.imgSlot];
     });
     document.querySelectorAll('a.cite').forEach(a => {
       a.addEventListener('click', e => {

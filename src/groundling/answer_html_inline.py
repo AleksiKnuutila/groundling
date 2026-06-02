@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import base64
 import html as html_lib
+import json
 import re
 from pathlib import Path
 
@@ -49,12 +50,25 @@ def build_inline_answer_html(
     image_paths maps cite_id -> Path to PDF page PNG; base64-inlined.
     image_dims maps cite_id -> (width_px, height_px) of that PNG.
     answer_md uses cite://N as href scheme (rewritten upstream).
+
+    Multiple cites on the same PDF page share an image_paths entry —
+    we deduplicate by path so each unique image is base64-encoded
+    once into a registry and referenced by slot id everywhere else.
     """
+    # Build the slot registry: each unique image path → one data URI.
+    path_to_slot: dict[Path, int] = {}
+    image_slots: list[str] = []
+    slot_by_cite: dict[int, int] = {}
+    for cid, path in image_paths.items():
+        if path not in path_to_slot:
+            path_to_slot[path] = len(image_slots)
+            image_slots.append(_png_to_data_uri(path))
+        slot_by_cite[cid] = path_to_slot[path]
+
     inline_cites = []
     for rec in cite_records:
         cid = rec["cite_id"]
         if rec["kind"] == "pdf":
-            data_uri = _png_to_data_uri(image_paths[cid])
             image_w, image_h = image_dims[cid]
             x0 = min(s["bbox"][0] for s in rec["spans"])
             y0 = min(s["bbox"][1] for s in rec["spans"])
@@ -65,7 +79,8 @@ def build_inline_answer_html(
             bw = int((x1 - x0) * scale)
             bh = int((y1 - y0) * scale)
             inline_cites.append({
-                "cite_id": cid, "kind": "pdf", "data_uri": data_uri,
+                "cite_id": cid, "kind": "pdf",
+                "slot": slot_by_cite[cid],
                 "bx": bx, "by": by, "bw": bw, "bh": bh,
                 "bx_pct": bx / image_w * 100,
                 "by_pct": by / image_h * 100,
@@ -86,19 +101,25 @@ def build_inline_answer_html(
 
     decorated_body = _decorate_for_inline(
         answer_md, cite_records,
-        image_paths=image_paths, image_dims=image_dims, scale=scale,
+        slot_by_cite=slot_by_cite, image_dims=image_dims, scale=scale,
     )
     template = _env.get_template("answer_inline.html.j2")
     return template.render(
-        answer_html=decorated_body, inline_cites=inline_cites,
+        answer_html=decorated_body,
+        inline_cites=inline_cites,
+        image_slots_json=json.dumps(image_slots),
     )
 
 
 def _decorate_for_inline(
-    answer_md, cite_records, *, image_paths, image_dims, scale,
+    answer_md, cite_records, *, slot_by_cite, image_dims, scale,
 ):
     """Render markdown to HTML; decorate cite anchors with data-* attrs
-    and rewrite cite://N hrefs to #cite-N in-page anchors."""
+    and rewrite cite://N hrefs to #cite-N in-page anchors.
+
+    PDF cite anchors carry `data-img-slot=N` instead of the data URI
+    itself — runtime JS looks the URI up from the shared registry, so
+    each unique image is base64-encoded exactly once in the HTML."""
     md = MarkdownIt("commonmark").enable("table")
     md.validateLink = lambda url: True
     rendered = md.render(answer_md)
@@ -121,7 +142,9 @@ def _decorate_for_inline(
                 image_filename=f"_inline_{cid}",
                 image_w_px=image_w, image_h_px=image_h, scale=scale,
             )
-            attrs["data-img"] = _png_to_data_uri(image_paths[cid])
+            # Drop data-img (was the per-cite data URI); use slot id.
+            attrs.pop("data-img", None)
+            attrs["data-img-slot"] = str(slot_by_cite[cid])
         else:
             attrs = build_cite_attrs(
                 {"cite_id": cid, "kind": "web"},
