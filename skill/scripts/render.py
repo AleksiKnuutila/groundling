@@ -23,6 +23,42 @@ from groundling.markers import parse_markers, resolve_marker_to_spans
 from groundling.render import render_pdf_page
 
 
+def load_web_evidence(web_dir: Path) -> dict[str, dict]:
+    """Glob <web_dir>/*.json and return {url: evidence_dict}.
+
+    Malformed files and files missing required keys are skipped with
+    a warning to stderr."""
+    if not web_dir.exists():
+        return {}
+    REQUIRED = {"url", "title", "fetched_at", "extracted_text"}
+    out: dict[str, dict] = {}
+    for p in sorted(web_dir.glob("*.json")):
+        try:
+            payload = json.loads(p.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError) as exc:
+            print(f"warn: skipping {p.name}: {exc}", file=sys.stderr)
+            continue
+        missing = REQUIRED - payload.keys()
+        if missing:
+            print(f"warn: skipping {p.name}: missing keys {sorted(missing)}",
+                  file=sys.stderr)
+            continue
+        out[payload["url"]] = payload
+    return out
+
+
+def compute_excerpt(text: str, quote: str, window: int = 150) -> tuple[str, int]:
+    """Locate `quote` in `text`, return (excerpt, quote_offset_in_excerpt).
+
+    Excerpt is `text` sliced to ±window chars around the quote span,
+    clamped to text bounds."""
+    pos = text.index(quote)
+    start = max(0, pos - window)
+    end = min(len(text), pos + len(quote) + window)
+    excerpt = text[start:end]
+    return excerpt, pos - start
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--prep-dir", type=Path, required=True)
