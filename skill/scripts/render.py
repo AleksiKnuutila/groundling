@@ -38,6 +38,10 @@ def load_web_evidence(web_dir: Path) -> dict[str, dict]:
         except (json.JSONDecodeError, OSError) as exc:
             print(f"warn: skipping {p.name}: {exc}", file=sys.stderr)
             continue
+        if not isinstance(payload, dict):
+            print(f"warn: skipping {p.name}: not a JSON object",
+                  file=sys.stderr)
+            continue
         missing = REQUIRED - payload.keys()
         if missing:
             print(f"warn: skipping {p.name}: missing keys {sorted(missing)}",

@@ -47,6 +47,22 @@ def test_load_web_evidence_skips_missing_required_keys(tmp_path, capsys):
     assert "01.json" in capsys.readouterr().err
 
 
+def test_load_web_evidence_skips_non_dict_json(tmp_path, capsys):
+    """A file that parses as valid JSON but isn't an object (e.g. a
+    bare string or array) must be skipped with a warning, not crash."""
+    (tmp_path / "bad.json").write_text('"just a string"', encoding="utf-8")
+    (tmp_path / "list.json").write_text('[1, 2, 3]', encoding="utf-8")
+    _write_ev(tmp_path, "good.json", {
+        "url": "https://example.com/x", "title": "X",
+        "fetched_at": "2026-06-02T00:00:00Z", "extracted_text": "t",
+    })
+    ev = render.load_web_evidence(tmp_path)
+    assert list(ev) == ["https://example.com/x"]
+    err = capsys.readouterr().err
+    assert "bad.json" in err
+    assert "list.json" in err
+
+
 def test_compute_excerpt_middle(tmp_path):
     text = "a" * 200 + "QUOTE" + "b" * 200
     excerpt, off = render.compute_excerpt(text, "QUOTE", window=150)
