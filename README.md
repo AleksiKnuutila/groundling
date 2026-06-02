@@ -72,8 +72,8 @@ Pre-built zip: download `groundling-skill.zip` from the
 [latest GitHub Release](https://github.com/AleksiKnuutila/groundling/releases/latest),
 or build it from source:
 
-    ./skill/build_zip.sh v0.1.1
-    # produces skill/dist/groundling-skill-v0.1.1.zip + groundling-skill.zip
+    ./skill/build_zip.sh v0.2.0
+    # produces skill/dist/groundling-skill-v0.2.0.zip + groundling-skill.zip
 
 ### Claude.ai web (Pro / Max / Team / Enterprise)
 
