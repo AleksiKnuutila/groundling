@@ -227,8 +227,8 @@ def run_render(
     (run_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
     (run_dir / "answer.md").write_text(out, encoding="utf-8")
 
-    # Also emit answer.html — browser view with hover preview + side
-    # pane. Build image_dims from the cite records we already validated.
+    # Also emit answer.html — browser view with hover card + click-to-open
+    # modal iframe. Build image_dims from the cite records we already validated.
     image_dims: dict[int, tuple[str, int, int]] = {}
     page_dims_cache: dict[tuple[Path, int], tuple[int, int]] = {}
     for rec in cite_records:

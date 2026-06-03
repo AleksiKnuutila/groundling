@@ -1,9 +1,10 @@
 """Build a browser-native answer view: answer.html.
 
 Takes the validated cite records and the rewritten answer markdown
-from run_render and emits a single self-contained HTML page with cite
-highlights, hover previews of the cited PDF region, and a side-pane
-iframe of the full cite page.
+from run_render and emits a self-contained HTML page with the
+trust-strip header, state-styled inline cites, a floating hover card,
+and a click-to-open modal that loads each cite's source page (cites/N.html)
+in an iframe.
 """
 from __future__ import annotations
 
