@@ -81,12 +81,17 @@ If the user's terminal doesn't make `file://` links clickable, pass
 serve` in a second shell — that serves the state dir over HTTP so
 cite links open in a browser.
 
-## Step 4: judge the cites (default-on)
+## Step 4: judge the cites (REQUIRED)
 
-**Run the judge by default after rendering.** Skip ONLY if the user
-asked for a quick answer ("just the answer, no checking", "skip the
-judge", "don't verify the cites"). Verifiability is the point of this
-project — when in doubt, run it.
+After the first render produces `answer.md` and `manifest.json`, you MUST
+run the judge before surfacing the answer to the user. The judge is the
+reason this project exists — without it, citations are only syntactically
+validated, not semantically verified.
+
+**Skip only if the user explicitly opted out** — e.g., said "skip the
+judge", "quick answer please", "don't verify the cites" at some point in
+this conversation. Absent an explicit opt-out, do not skip on your own
+judgment. "It looks fine, I'll skip it" is not acceptable.
 
 The judge runs as a second pass that decorates each cite with a verdict.
 It deposits JSON into `/tmp/groundling-judge/` and re-invokes render
@@ -97,91 +102,87 @@ onto every cite anchor and turns on the Spotlight toggle.
 mkdir -p /tmp/groundling-judge
 ```
 
-### Pass 1: uncited significant claims
+### Pass 1: uncited significant claims (batched)
 
 Scan the rewritten answer (the markdown render just wrote into the run
 dir) for factual claims that should have had a cite marker but don't.
-One subagent gets the whole answer + corpus index; it returns a JSON
-array of flagged spans.
+Produce the full list in ONE pass over the answer.
 
-Subagent prompt:
+Read the entire rewritten `answer.md` and identify factual claims that:
+  (a) name a specific number, date, attribution, or causal mechanism,
+      AND
+  (b) have NO citation marker (`[N]`, `chunk://`, or `web://`) within
+      the same sentence.
 
-    Read this entire answer:
-    <the rewritten answer.md content>
+Skip:
+  - Framing prose ("the report covers", "according to the data")
+  - Opinion ("this is concerning", "an interesting finding")
+  - Claims that paraphrase a nearby cited claim
 
-    Available source titles:
-    <bulleted list of pdf filenames + web titles from the corpus>
+For each uncited significant claim, produce:
 
-    Identify factual claims in the answer that:
-      (a) name a specific number, date, attribution, or causal
-          mechanism, AND
-      (b) have NO citation marker ([N], chunk://, or web://) within the
-          same sentence.
+    {"span_text": "exact verbatim substring of the answer",
+     "before_context": "3-8 words immediately preceding the span",
+     "after_context": "3-8 words immediately following the span",
+     "note": "short reasoning (<= 200 chars)"}
 
-    Skip:
-      - Framing prose ("the report covers", "according to the data")
-      - Opinion ("this is concerning", "an interesting finding")
-      - Claims that paraphrase a nearby cited claim
-
-    For each uncited significant claim, output JSON:
-      {"span_text": "exact verbatim substring of the answer",
-       "before_context": "3-8 words immediately preceding the span",
-       "after_context": "3-8 words immediately following the span",
-       "note": "short reasoning (<= 200 chars)"}
-
-    Output a JSON array. Empty array if no uncited claims.
-
-Deposit at `/tmp/groundling-judge/uncited.json`:
+Deposit a JSON array at `/tmp/groundling-judge/uncited.json`:
 
     [{"span_text": "...", "before_context": "...",
       "after_context": "...", "note": "..."},
      ...]
 
 `span_text` must be a verbatim substring of the rewritten answer.md.
-The re-render counter `uncited_unmatched` flags spans we couldn't
-locate (usually a hallucinated paraphrase) and `uncited_overlap`
-flags spans that landed inside an existing cite link.
+Write `[]` if no uncited claims — STILL write the file, do not skip
+the deposit step. The re-render counter `uncited_unmatched` flags
+spans we couldn't locate (usually a hallucinated paraphrase) and
+`uncited_overlap` flags spans that landed inside an existing cite link.
 
-### Pass 2: cited verdicts
+### Pass 2: cited verdicts (batched)
 
-For each cite in the run's `manifest.json`, dispatch a fresh Task
-subagent with this exact prompt (fill the bracketed slots from
-`manifest.json` + the corresponding `chunks.json` / web evidence):
+Read `manifest.json` for the list of cites that need judging. For each
+cite, you have access to its `claim_text`, its `cited_text` (quote), and
+its source pointer (PDF stem + chunk_id, or web url).
 
-    Source excerpt:
-      <chunk text from <prep_dir>/<stem>.chunks.json for the cite's
-       chunk_id, OR ±300 chars of extracted_text around the quote
-       for web cites>
+Gather the source excerpts ONCE up front:
+  - For each PDF cite, locate the matching chunk in
+    `<prep_dir>/<pdf_stem>.chunks.json` and grab its full text.
+  - For each web cite, locate the matching URL in
+    `/tmp/groundling-web/*.json` and grab ±300 chars around the quote
+    in `extracted_text`.
 
-    Source label: <pdf_stem · page N | url>
+Now produce the FULL verdicts map in ONE structured response. For each
+cite_id in `manifest.json`:
 
-    Claim from the answer:
-      <the claim_text from the cite record, OR the sentence in
-       answer.md that contains the cite for point markers>
+  1. Look at ONLY that cite's source excerpt, claim_text (or the
+     sentence containing the cite in `answer.md` for point markers),
+     and quote. Don't reference other cites or the rest of the answer
+     while you decide this one.
+  2. Decide ONE of:
+     - **supported** — the source excerpt directly says what the claim
+       says, or is the precise basis for the claimed fact.
+     - **partial** — the source says something related (adjacent,
+       weaker, broader, or narrower) but doesn't fully back the
+       specific claim.
+     - **unsupported** — the source is irrelevant, says something
+       different, or actively contradicts the claim.
+  3. Write a short note (≤ 200 chars) explaining the call.
 
-    Cited quote:
-      "<quote from the cite record>"
+Output the complete JSON map at once. Discipline: judge each cite as if
+it were the only one — do not let earlier verdicts influence later ones,
+and do not aggregate ("most cites are supported, so..."). Each verdict
+is a fresh, scoped judgment.
 
-    Does the source excerpt support the claim? Answer in ONE of:
-    - supported: the source directly says what the claim says, or
-      is the precise basis for the claimed fact
-    - partial: the source says something related — adjacent, weaker,
-      broader, or narrower — but doesn't fully back the specific
-      claim
-    - unsupported: the source is irrelevant, says something different,
-      or actively contradicts the claim
+Write the resulting map to `/tmp/groundling-judge/verdicts.json`:
 
-    Output JSON ONLY, no prose:
-    {"state": "supported|partial|unsupported",
-     "note": "<= 200 chars explaining the call"}
-
-Collect all subagent outputs into `/tmp/groundling-judge/verdicts.json`:
-
-    {"1": {"state": "supported", "note": "..."},
-     "2": {"state": "partial",   "note": "..."},
+    {"1": {"state": "supported", "note": "Source line states ..."},
+     "2": {"state": "partial",   "note": "Source describes ..."},
+     "3": {"state": "unsupported", "note": "Source says X, not Y."},
      ...}
 
-Keys are stringified cite_ids matching `manifest.json`.
+Keys are stringified cite_ids matching `manifest.json`. EVERY cite in
+`manifest.json` MUST appear in the map — none should be missing. If
+you're unsure on a cite, mark it partial rather than skipping.
 
 ### Re-render with the judge
 
@@ -193,10 +194,13 @@ After all subagents return, re-invoke render with `--judge-dir`:
 The resulting `answer.html` carries state-colored cite underlines, a
 working Spotlight toggle, judge notes in the hover card / modal, and
 dashed-blue "needs-citation" underlines on any uncited significant
-claims Pass 1 flagged. stderr reports counters from both passes:
-`verdicts_missing` / `verdicts_unmapped` (Pass 2 cross-reference) and
-`uncited_matched` / `uncited_unmatched` / `uncited_overlap` (Pass 1
-span-location).
+claims Pass 1 flagged. Stderr counters: `verdicts_missing` (cites
+without verdicts — should be 0), `verdicts_unmapped` (verdict entries
+for unknown cite_ids — should be 0), `uncited_matched` /
+`uncited_unmatched` / `uncited_overlap` (Pass 1 span-location).
+
+If `verdicts_missing > 0`, you missed cites in Pass 2 — add verdicts
+for the missing cite_ids to `verdicts.json` and re-render.
 
 ---
 
