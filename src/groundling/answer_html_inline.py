@@ -16,7 +16,23 @@ from pathlib import Path
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from markdown_it import MarkdownIt
 
-from groundling.answer_html import build_cite_attrs
+
+def _json_for_html(obj) -> str:
+    """JSON-encode `obj` safely for embedding inside a <script> tag.
+
+    `json.dumps` doesn't escape `<`, `>`, `&`, or U+2028/U+2029, so a
+    field containing the literal substring `</script>` would close the
+    surrounding script block and inject the rest as HTML. We replace
+    the four hazardous code points with their escaped JS-string forms.
+    Same trick Flask's `tojson` filter uses."""
+    return (
+        json.dumps(obj)
+        .replace("<", "\\u003c")
+        .replace(">", "\\u003e")
+        .replace("&", "\\u0026")
+        .replace(" ", "\\u2028")
+        .replace(" ", "\\u2029")
+    )
 
 
 _TEMPLATE_DIR = Path(__file__).parent / "templates"
@@ -51,24 +67,11 @@ def build_inline_answer_html(
     image_paths: dict[int, Path],
     image_dims: dict[int, tuple[int, int]],
     scale: float = 2.0,
+    page_title: str | None = None,
+    subtitle: str | None = None,
 ) -> str:
-    """Build a single self-contained HTML file.
-
-    cite_records entries must include:
-      - cite_id, kind ("pdf" or "web"), spans (for pdf)
-      - marker_quote: verbatim cited text
-      - claim_text: agent's claim wrapping the cite (or None)
-      - pdf_filename (for pdf) or url (for web)
-
-    image_paths maps cite_id -> Path to PDF page PNG; base64-inlined.
-    image_dims maps cite_id -> (width_px, height_px) of that PNG.
-    answer_md uses cite://N as href scheme (rewritten upstream).
-
-    Multiple cites on the same PDF page share an image_paths entry —
-    we deduplicate by path so each unique image is base64-encoded
-    once into a registry and referenced by slot id everywhere else.
-    """
-    # Build the slot registry: each unique image path → one data URI.
+    """Build a single self-contained HTML file. See module docstring."""
+    # Slot registry: each unique image path → one data URI.
     path_to_slot: dict[Path, int] = {}
     image_slots: list[str] = []
     slot_by_cite: dict[int, int] = {}
@@ -78,72 +81,87 @@ def build_inline_answer_html(
             image_slots.append(_png_to_data_uri(path))
         slot_by_cite[cid] = path_to_slot[path]
 
-    inline_cites = []
-    excerpt_html_by_id: dict[int, str] = {}
+    # Build the cites-by-id map the new template's JS consumes.
+    cites_by_id: dict[str, dict] = {}
     for rec in cite_records:
         cid = rec["cite_id"]
+        entry: dict = {
+            "id": cid,
+            "kind": rec["kind"],
+            "state": "none",  # PR 2 overrides
+            "claim": rec.get("claim_text") or "",
+            "quote": rec["marker_quote"],
+        }
         if rec["kind"] == "pdf":
             image_w, image_h = image_dims[cid]
             x0 = min(s["bbox"][0] for s in rec["spans"])
             y0 = min(s["bbox"][1] for s in rec["spans"])
             x1 = max(s["bbox"][2] for s in rec["spans"])
             y1 = max(s["bbox"][3] for s in rec["spans"])
-            bx = int(x0 * scale)
-            by = int(y0 * scale)
-            bw = int((x1 - x0) * scale)
-            bh = int((y1 - y0) * scale)
-            inline_cites.append({
-                "cite_id": cid, "kind": "pdf",
+            bx = int(x0 * scale); by = int(y0 * scale)
+            bw = int((x1 - x0) * scale); bh = int((y1 - y0) * scale)
+            page = rec["spans"][0]["page"]
+            filename = rec.get("pdf_filename", "")
+            entry.update({
                 "slot": slot_by_cite[cid],
+                "imgW": image_w, "imgH": image_h,
                 "bx": bx, "by": by, "bw": bw, "bh": bh,
-                "bx_pct": bx / image_w * 100,
-                "by_pct": by / image_h * 100,
-                "bw_pct": bw / image_w * 100,
-                "bh_pct": bh / image_h * 100,
-                "quote": rec["marker_quote"],
-                "claim": rec.get("claim_text") or "",
-                "filename": rec.get("pdf_filename", ""),
-                "page": rec["spans"][0]["page"],
+                "bxPct": bx / image_w * 100, "byPct": by / image_h * 100,
+                "bwPct": bw / image_w * 100, "bhPct": bh / image_h * 100,
+                "page": page,
+                "filename": filename,
+                "sourceLabel": f"{filename} · p.{page}",
             })
         else:  # web
             excerpt_html = _build_excerpt_html(
                 rec["excerpt"], rec["marker_quote"],
                 rec["quote_offset_in_excerpt"],
             )
-            excerpt_html_by_id[cid] = excerpt_html
-            inline_cites.append({
-                "cite_id": cid, "kind": "web",
+            try:
+                from urllib.parse import urlparse
+                host = urlparse(rec["url"]).hostname or ""
+                if host.startswith("www."):
+                    host = host[4:]
+            except Exception:
+                host = ""
+            entry.update({
                 "url": rec["url"],
-                "title": rec["title"],
-                "fetched_at": rec["fetched_at"],
-                "quote": rec["marker_quote"],
-                "claim": rec.get("claim_text") or "",
-                "excerpt_html": excerpt_html,
+                "host": host,
+                "title": rec.get("title", ""),
+                "fetchedAt": rec.get("fetched_at", ""),
+                "excerptHTML": excerpt_html,
+                "sourceLabel": rec.get("title") or rec["url"],
             })
+        cites_by_id[str(cid)] = entry
 
-    decorated_body = _decorate_for_inline(
-        answer_md, cite_records,
-        slot_by_cite=slot_by_cite, image_dims=image_dims, scale=scale,
-        excerpt_html_by_id=excerpt_html_by_id,
-    )
+    decorated_body = _decorate_for_inline(answer_md, cite_records)
+
+    total_cites = len(cite_records)
+    if subtitle is None:
+        subtitle = f"{total_cites} cites validated" if total_cites else ""
+
+    # PR 2 sets this to True when verdicts.json is present. PR 1 leaves
+    # every cite at data-state="none" so the Spotlight toggle would just
+    # dim the whole page — hide the button until there's something to
+    # actually spotlight.
+    has_judge_data = False
+
     template = _env.get_template("answer_inline.html.j2")
     return template.render(
         answer_html=decorated_body,
-        inline_cites=inline_cites,
-        image_slots_json=json.dumps(image_slots),
+        cites_json=_json_for_html(cites_by_id),
+        image_slots_json=_json_for_html(image_slots),
+        page_title=page_title,
+        subtitle=subtitle,
+        total_cites=total_cites,
+        has_judge_data=has_judge_data,
     )
 
 
-def _decorate_for_inline(
-    answer_md, cite_records, *, slot_by_cite, image_dims, scale,
-    excerpt_html_by_id: dict[int, str],
-):
-    """Render markdown to HTML; decorate cite anchors with data-* attrs
-    and rewrite cite://N hrefs to #cite-N in-page anchors.
-
-    PDF cite anchors carry `data-img-slot=N` instead of the data URI
-    itself — runtime JS looks the URI up from the shared registry, so
-    each unique image is base64-encoded exactly once in the HTML."""
+def _decorate_for_inline(answer_md, cite_records):
+    """Render markdown to HTML; rewrite cite://N anchors to a.cite with
+    data-* attrs. Per-cite imagery and excerpts live in
+    window.GROUNDLING_CITES (server-side JSON), not in DOM."""
     md = MarkdownIt("commonmark").enable("table")
     md.validateLink = lambda url: True
     rendered = md.render(answer_md)
@@ -159,40 +177,20 @@ def _decorate_for_inline(
         rec = records_by_id.get(cid)
         if rec is None:
             return m.group(0)
-        if rec["kind"] == "pdf":
-            image_w, image_h = image_dims[cid]
-            attrs = build_cite_attrs(
-                {"cite_id": cid, "kind": "pdf", "spans": rec["spans"]},
-                image_filename=f"_inline_{cid}",
-                image_w_px=image_w, image_h_px=image_h, scale=scale,
-            )
-            # Drop data-img (was the per-cite data URI); use slot id.
-            attrs.pop("data-img", None)
-            attrs["data-img-slot"] = str(slot_by_cite[cid])
-        else:
-            attrs = build_cite_attrs(
-                {"cite_id": cid, "kind": "web"},
-                image_filename=None, image_w_px=None,
-                image_h_px=None, scale=scale,
-            )
-        attrs_str = " ".join(
-            f'{k}="{html_lib.escape(v, quote=True)}"'
-            for k, v in attrs.items()
+        # data-cite-id + data-kind + data-state. Everything else lives in
+        # window.GROUNDLING_CITES, looked up by id.
+        attrs = (
+            f'data-cite-id="{cid}" '
+            f'data-kind="{rec["kind"]}" '
+            f'data-state="none"'
         )
-        if rec["kind"] == "web":
-            preview = (
-                f'<span class="preview preview-text">'
-                f'{excerpt_html_by_id[cid]}</span>'
-            )
-        else:
-            preview = '<span class="preview"></span>'
-        # No href: navigating to #cite-N inside the Claude.ai artifact
-        # iframe bubbles a fragment change to the parent frame, which
+        # No href: in the Claude.ai artifact iframe, navigating to
+        # #cite-N bubbles a fragment change to the parent frame, which
         # tries to navigate claudeusercontent.com instead of opening
-        # the dialog. role+tabindex preserve keyboard a11y.
+        # the modal. role+tabindex preserve keyboard a11y.
         return (
             f'<a class="cite" role="button" tabindex="0"{rest} '
-            f'{attrs_str}>{inner}{preview}</a>'
+            f'{attrs}>{inner}</a>'
         )
 
     return anchor_re.sub(_replace, rendered)

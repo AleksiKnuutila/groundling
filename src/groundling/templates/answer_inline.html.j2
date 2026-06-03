@@ -3,202 +3,385 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Grounded Answer</title>
+<title>{{ page_title or "Grounded Answer" }}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap" rel="stylesheet">
 <style>
-  body { font: 16px/1.55 system-ui, sans-serif; color: #222; margin: 0; }
-  main.answer { padding: 32px 40px; max-width: 760px; margin: 0 auto; }
-  main.answer h1, main.answer h2, main.answer h3 { line-height: 1.25; }
-  main.answer p { margin: 0.8em 0; }
-  main.answer ul, main.answer ol { padding-left: 1.4em; }
+  :root {
+    --ink: #1a1c1e; --ink-soft: #565b61; --line: #e6e6e2; --paper: #fbfbf9;
+    --sup: #2f8a52; --par: #a9760a; --uns: #c43d2c; --cit: #3160a8;
+    --accent: #2a2c2e;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--paper); color: var(--ink);
+    font-family: "IBM Plex Sans", system-ui, sans-serif; font-size: 17px; line-height: 1.62; }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 0 28px 140px; }
 
-  a.cite {
-    background: #fff7c2;
-    border-bottom: 1px solid #e0c000;
-    text-decoration: none;
-    color: inherit;
-    padding: 0 2px;
-    position: relative;
-    cursor: pointer;
-  }
-  a.cite:hover { background: #ffeb80; }
+  /* ---- Header strip ---- */
+  .trustbar { position: sticky; top: 0; z-index: 30; background: rgba(251,251,249,.92);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
+    margin: 0 -28px 36px; padding: 14px 28px; display: flex; align-items: center; gap: 18px; }
+  .brand { font-family: "Newsreader", serif; font-size: 19px; letter-spacing: .2px; }
+  .brand b { font-weight: 500; }
+  .brand .dot { color: var(--sup); }
+  .tally { flex: 1; display: flex; gap: 13px; font-family: "IBM Plex Mono", monospace;
+    font-size: 12px; color: var(--ink-soft); white-space: nowrap; }
+  .tally b { color: var(--ink); }
+  .tally i { font-style: normal; width: 8px; height: 8px; border-radius: 50%;
+    display: inline-block; margin-right: 5px; vertical-align: middle; }
+  .toggle { font: inherit; font-size: 13px; border: 1px solid var(--line); background: #fff;
+    color: var(--ink); padding: 7px 12px; border-radius: 8px; cursor: pointer; white-space: nowrap; }
+  .toggle[aria-pressed="true"] { background: var(--accent); color: #fff; border-color: var(--accent); }
 
-  a.cite .preview {
-    display: none;
-    position: absolute;
-    bottom: 1.6em; left: 0;
-    width: 480px; height: 280px;
-    border: 1px solid #bbb;
-    box-shadow: 0 6px 24px rgba(0,0,0,0.2);
-    background-color: #fff;
-    background-repeat: no-repeat;
-    z-index: 100;
-    overflow: hidden;
-    border-radius: 4px;
-  }
-  a.cite:hover .preview { display: block; }
-  a.cite[data-kind="pdf"] .preview {
-    background-image: var(--img);
-    background-size: var(--img-w) var(--img-h);
-    background-position:
-      calc(240px - var(--bx) - var(--bw) / 2)
-      calc(140px - var(--by) - var(--bh) / 2);
-  }
-  a.cite[data-kind="pdf"] .preview::after {
-    content: "";
-    position: absolute;
-    left: calc(240px - var(--bw) / 2);
-    top:  calc(140px - var(--bh) / 2);
-    width: var(--bw); height: var(--bh);
-    background: rgba(255, 235, 0, 0.35);
-    border: 1px solid rgba(200, 160, 0, 0.6);
-  }
+  /* ---- Title + subtitle ---- */
+  h1 { font-family: "Newsreader", serif; font-weight: 500; font-size: 33px; line-height: 1.2;
+    letter-spacing: -.2px; margin: 6px 0 4px; }
+  .sub { color: var(--ink-soft); font-size: 14px; margin-bottom: 30px;
+    font-family: "IBM Plex Mono", monospace; }
 
-  dialog.cite-detail {
-    border: 1px solid #ccc;
-    border-radius: 6px;
-    padding: 16px;
-    max-width: 80vw;
-    max-height: 80vh;
-    overflow: auto;
-  }
-  dialog.cite-detail .pdf-image {
-    position: relative;
-    display: inline-block;
-  }
-  dialog.cite-detail img { display: block; max-width: 100%; }
-  dialog.cite-detail .highlight {
-    position: absolute;
-    background: rgba(255, 235, 0, 0.35);
-    border: 1px solid rgba(200, 160, 0, 0.6);
-    pointer-events: none;
-  }
-  dialog.cite-detail .quote {
-    border-left: 3px solid #ccc;
-    background: #fafafa;
-    padding: 8px 12px;
-    margin: 12px 0;
-  }
-  dialog.cite-detail .source { opacity: 0.6; font-size: 12px; }
-  dialog.cite-detail .close-btn {
-    position: absolute; top: 8px; right: 12px;
-    background: #fff; border: 1px solid #ccc; border-radius: 4px;
-    width: 28px; height: 28px; cursor: pointer;
-  }
+  /* ---- Answer body ---- */
+  main h2 { font-family: "Newsreader", serif; font-weight: 500; font-size: 24px; margin: 38px 0 6px; }
+  main h3 { font-size: 14px; text-transform: uppercase; letter-spacing: .09em; color: var(--ink-soft);
+    margin: 30px 0 2px; font-weight: 600; }
+  main p { margin: 14px 0; }
+  main ul, main ol { padding-left: 1.4em; }
 
-  a.cite[data-kind="web"]::before {
-    content: "🌐";
-    font-size: 0.75em;
-    margin-right: 2px;
-    opacity: 0.7;
-  }
-  a.cite .preview-text {
-    display: none;
-    position: absolute;
-    bottom: 1.6em; left: 0;
-    width: 360px;
-    max-height: 200px;
-    overflow: auto;
-    padding: 8px 10px;
-    border: 1px solid #bbb;
-    border-radius: 4px;
-    background: #fff;
-    box-shadow: 0 6px 24px rgba(0,0,0,0.2);
-    font-size: 14px;
-    line-height: 1.5;
-    color: #333;
-    z-index: 100;
-    /* Override the .preview defaults so this isn't bg-image sized. */
-    height: auto;
-  }
-  a.cite:hover .preview-text { display: block; }
-  a.cite mark, dialog.cite-detail mark {
-    background: #fff200;
-    padding: 0 2px;
-  }
-  dialog.cite-detail .excerpt-quote { font-style: normal; }
-  dialog.cite-detail .fetched-at { opacity: 0.55; font-size: 12px; }
+  /* ---- Inline cite styling ---- */
+  a.cite { color: inherit; text-decoration: none; cursor: pointer; padding-bottom: 1px;
+    border-bottom: 2px solid #cfcfca; }
+  a.cite[data-state="supported"]    { border-color: #bfe0cb; }
+  a.cite[data-state="partial"]      { border-color: var(--par); }
+  a.cite[data-state="unsupported"]  { border-color: var(--uns); }
+  a.cite[data-state="needs-citation"]{ border-color: var(--cit); border-bottom-style: dashed; }
+  a.cite[data-state="partial"]::before,
+  a.cite[data-state="unsupported"]::before,
+  a.cite[data-state="needs-citation"]::before {
+    content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+    margin-right: 3px; vertical-align: 1px; }
+  a.cite[data-state="partial"]::before { background: var(--par); }
+  a.cite[data-state="unsupported"]::before { background: var(--uns); }
+  a.cite[data-state="needs-citation"]::before { background: var(--cit); }
+  a.cite:hover { background: #fffceb; }
+  a.cite:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-  @media (hover: none) { a.cite .preview { display: none !important; } }
+  /* Spotlight mode: dim supported cites so weaker ones pop. */
+  body.weak a.cite[data-state="supported"],
+  body.weak a.cite:not([data-state]),
+  body.weak a.cite[data-state="none"] { border-color: var(--line); color: var(--ink-soft); }
+  body.weak a.cite[data-state="supported"]:hover { color: var(--ink); }
+
+  /* ---- Hover card ---- */
+  #card { position: fixed; z-index: 50; width: 420px; background: #fff; border: 1px solid var(--line);
+    border-radius: 12px; box-shadow: 0 16px 44px -14px rgba(20,20,20,.34); overflow: hidden;
+    opacity: 0; transform: translateY(4px); pointer-events: none; transition: opacity .12s, transform .12s; }
+  #card.show { opacity: 1; transform: translateY(0); }
+  .card-band { display: flex; align-items: center; gap: 9px; padding: 10px 14px; font-size: 13px;
+    font-weight: 600; color: #fff; }
+  .card-band .vg { width: 18px; height: 18px; border-radius: 50%; background: rgba(255,255,255,.25);
+    display: grid; place-items: center; font-size: 12px; }
+  .band-supported { background: var(--sup); }
+  .band-partial   { background: var(--par); }
+  .band-unsupported { background: var(--uns); }
+  .band-needs-citation { background: var(--cit); }
+  .band-none { background: var(--ink-soft); }
+  .card-body { padding: 13px 14px 14px; }
+  .card-src { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--ink-soft);
+    display: flex; align-items: center; gap: 6px; margin-bottom: 10px; }
+  .card-src .kind { background: #f0f0ec; padding: 2px 6px; border-radius: 5px; }
+  .crop { position: relative; border: 1px solid var(--line); border-radius: 8px;
+    width: 392px; height: 132px; overflow: hidden; background: #fff; }
+  .crop img { position: absolute; max-width: none; }
+  .crop-hl { position: absolute; background: rgba(255,221,64,.28);
+    outline: 1.5px solid rgba(196,150,0,.7); border-radius: 2px; pointer-events: none; }
+  .excerpt { font-size: 13.5px; line-height: 1.5; color: #33373b; max-height: 132px; overflow: hidden;
+    -webkit-mask-image: linear-gradient(#000 75%, transparent); mask-image: linear-gradient(#000 75%, transparent); }
+  .excerpt mark { background: #fff1a8; padding: 0 2px; border-radius: 2px; }
+  .card-foot { margin-top: 11px; font-size: 11.5px; color: var(--ink-soft); display: flex;
+    justify-content: space-between; align-items: center; }
+  .card-foot .cta { color: var(--accent); font-weight: 600; }
+
+  /* ---- Modal ---- */
+  dialog.detail { border: none; border-radius: 14px; padding: 0; max-width: 760px; width: 92vw;
+    box-shadow: 0 30px 80px -20px rgba(0,0,0,.5); }
+  dialog.detail::backdrop { background: rgba(20,22,24,.42); backdrop-filter: blur(2px); }
+  .d-band { padding: 16px 20px; color: #fff; display: flex; align-items: center; gap: 11px; }
+  .d-band h4 { margin: 0; font-size: 16px; font-weight: 600; }
+  .d-body { padding: 20px; display: grid; gap: 16px; }
+  .d-claim { font-family: "Newsreader", serif; font-size: 20px; line-height: 1.35; }
+  .d-note { background: #f7f7f4; border-radius: 10px; padding: 13px 15px; font-size: 14px;
+    line-height: 1.55; color: #393d41; }
+  .d-note b { font-family: "IBM Plex Mono", monospace; font-size: 11px; text-transform: uppercase;
+    letter-spacing: .06em; color: var(--ink-soft); display: block; margin-bottom: 4px; font-weight: 600; }
+  .d-page { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; position: relative; }
+  .d-page img { display: block; width: 100%; }
+  .d-page-hl { position: absolute; background: rgba(255,221,64,.3);
+    outline: 2px solid rgba(196,150,0,.75); pointer-events: none; }
+  .d-src { font-size: 12.5px; color: var(--ink-soft); word-break: break-all; }
+  .d-src a { color: var(--cit); }
+  .close { position: absolute; top: 14px; right: 16px; width: 30px; height: 30px; border-radius: 50%;
+    border: none; background: rgba(255,255,255,.22); color: #fff; font-size: 17px; cursor: pointer; }
+
+  @media (hover: none) { #card { display: none !important; } }
 </style>
 </head>
 <body>
-<main class="answer">
-{{ answer_html | safe }}
-</main>
-
-{% for cite in inline_cites %}
-<dialog class="cite-detail" id="cite-{{ cite.cite_id }}" data-cite-id="{{ cite.cite_id }}">
-  <button class="close-btn" aria-label="Close">×</button>
-  {% if cite.kind == "pdf" %}
-  <h3>Cite {{ cite.cite_id }} — {{ cite.filename }} (page {{ cite.page }})</h3>
-  {% if cite.claim %}<div class="quote"><strong>Claim:</strong> {{ cite.claim }}</div>{% endif %}
-  <div class="quote"><strong>Quote:</strong> {{ cite.quote }}</div>
-  <div class="pdf-image">
-    <img data-img-slot="{{ cite.slot }}" alt="page {{ cite.page }}">
-    <div class="highlight" style="left: {{ cite.bx_pct }}%; top: {{ cite.by_pct }}%; width: {{ cite.bw_pct }}%; height: {{ cite.bh_pct }}%;"></div>
+<div class="wrap">
+  <div class="trustbar">
+    <div class="brand"><b>Groundling</b><span class="dot">.</span></div>
+    <div class="tally" id="tally">
+      <span><b>{{ total_cites }}</b> cites validated</span>
+    </div>
+    {% if has_judge_data %}
+    <button class="toggle" id="weakBtn" aria-pressed="false">Spotlight weak claims</button>
+    {% endif %}
   </div>
-  {% else %}
-  <h3>Cite {{ cite.cite_id }} — {{ cite.title }}</h3>
-  {% if cite.claim %}<div class="quote"><strong>Claim:</strong> {{ cite.claim }}</div>{% endif %}
-  <div class="quote excerpt-quote">{{ cite.excerpt_html | safe }}</div>
-  <p class="source">
-    <a href="{{ cite.url }}" target="_blank" rel="noopener">{{ cite.url }}</a>
-    <span class="fetched-at"> (fetched {{ cite.fetched_at }})</span>
-  </p>
-  {% endif %}
+  {% if page_title %}<h1>{{ page_title }}</h1>{% endif %}
+  {% if subtitle %}<div class="sub">{{ subtitle }}</div>{% endif %}
+  <main>
+{{ answer_html | safe }}
+  </main>
+</div>
+
+<div id="card" role="tooltip"></div>
+
+<dialog class="detail" id="modal">
+  <button class="close" aria-label="Close">&times;</button>
+  <div class="d-band" id="dBand"></div>
+  <div class="d-body" id="dBody"></div>
 </dialog>
-{% endfor %}
 
 <script>
-  // Shared image registry — each unique cited page PNG is base64
-  // encoded exactly once here. Cite anchors and dialog <img> elements
-  // reference it by slot id via `data-img-slot`.
+  // Cite metadata keyed by cite_id. Built server-side from cite_records.
+  window.GROUNDLING_CITES = {{ cites_json | safe }};
   window.IMG_REGISTRY = {{ image_slots_json | safe }};
 </script>
 <script>
-  (function () {
-    const REGISTRY = window.IMG_REGISTRY;
-    document.querySelectorAll('a.cite[data-kind="pdf"]').forEach(a => {
-      const src = REGISTRY[a.dataset.imgSlot];
-      a.style.setProperty('--img', `url("${src}")`);
-      a.style.setProperty('--img-w', a.dataset.imgW + 'px');
-      a.style.setProperty('--img-h', a.dataset.imgH + 'px');
-      a.style.setProperty('--bx', a.dataset.bx + 'px');
-      a.style.setProperty('--by', a.dataset.by + 'px');
-      a.style.setProperty('--bw', a.dataset.bw + 'px');
-      a.style.setProperty('--bh', a.dataset.bh + 'px');
-    });
-    document.querySelectorAll('dialog.cite-detail img[data-img-slot]').forEach(img => {
-      img.src = REGISTRY[img.dataset.imgSlot];
-    });
-    document.querySelectorAll('a.cite').forEach(a => {
-      const open = e => {
-        const cid = a.dataset.citeId;
-        const dlg = document.getElementById(`cite-${cid}`);
-        if (dlg) { e.preventDefault(); dlg.showModal(); }
-      };
-      a.addEventListener('click', open);
-      a.addEventListener('keydown', e => {
-        if (e.key === 'Enter' || e.key === ' ') open(e);
-      });
-    });
-    document.querySelectorAll('dialog.cite-detail .close-btn').forEach(btn => {
-      btn.addEventListener('click', () => btn.closest('dialog').close());
-    });
-    document.addEventListener('keydown', e => {
-      if (e.key === 'Escape') {
-        document.querySelectorAll('dialog[open]').forEach(d => d.close());
+(function () {
+  const CITES = window.GROUNDLING_CITES || {};
+  const REG = window.IMG_REGISTRY || [];
+
+  const STATE_LABELS = {
+    supported: 'Supported', partial: 'Partial', unsupported: 'Unsupported',
+    'needs-citation': 'Needs citation', none: 'Cite',
+  };
+  const STATE_GLYPHS = {
+    supported: '✓', partial: '~', unsupported: '✕',
+    'needs-citation': '+', none: '·',
+  };
+
+  // Defense in depth: only allow http(s) URLs to surface as links.
+  function safeUrl(u) {
+    if (typeof u !== 'string') return '';
+    try {
+      const parsed = new URL(u);
+      if (parsed.protocol === 'http:' || parsed.protocol === 'https:') return u;
+    } catch (e) {}
+    return '';
+  }
+
+  function el(tag, props, ...children) {
+    const e = document.createElement(tag);
+    if (props) {
+      for (const k of Object.keys(props)) {
+        const v = props[k];
+        if (k === 'class') e.className = v;
+        else if (k === 'style' && typeof v === 'object') Object.assign(e.style, v);
+        else if (k === 'text') e.textContent = v;
+        else if (k === 'html') e.innerHTML = v;  // caller asserts trust
+        else e.setAttribute(k, v);
       }
-    });
-    // Deep-link support: if the page loads with #cite-N in the URL,
-    // open that cite's dialog. Lets chat markdown like
-    // `[3](answer.html#cite-3)` jump straight to the verification view.
-    const hashMatch = window.location.hash.match(/^#cite-(\d+)$/);
-    if (hashMatch) {
-      const dlg = document.getElementById(`cite-${hashMatch[1]}`);
-      if (dlg && dlg.tagName === 'DIALOG') dlg.showModal();
     }
-  })();
+    for (const c of children) {
+      if (c == null) continue;
+      e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
+    }
+    return e;
+  }
+
+  // Spotlight toggle.
+  const weakBtn = document.getElementById('weakBtn');
+  if (weakBtn) {
+    weakBtn.addEventListener('click', () => {
+      const on = weakBtn.getAttribute('aria-pressed') === 'true';
+      weakBtn.setAttribute('aria-pressed', String(!on));
+      document.body.classList.toggle('weak', !on);
+    });
+  }
+
+  // ---- Hover card ----
+  const card = document.getElementById('card');
+  let hideT;
+
+  function makeCrop(cite) {
+    const w = 392, h = 132, scale = 0.46;
+    const root = el('div', { class: 'crop' });
+    const cx = cite.bx + cite.bw / 2;
+    const cy = cite.by + cite.bh / 2;
+    const img = el('img', {
+      src: REG[cite.slot],
+      style: {
+        width: cite.imgW * scale + 'px',
+        height: cite.imgH * scale + 'px',
+        left: (w / 2 - cx * scale) + 'px',
+        top: (h / 2 - cy * scale) + 'px',
+      },
+    });
+    root.appendChild(img);
+    root.appendChild(el('div', {
+      class: 'crop-hl',
+      style: {
+        left: (w / 2 - cite.bw * scale / 2) + 'px',
+        top: (h / 2 - cite.bh * scale / 2) + 'px',
+        width: (cite.bw * scale) + 'px',
+        height: (cite.bh * scale) + 'px',
+      },
+    }));
+    return root;
+  }
+
+  function buildCard(cite) {
+    const state = cite.state || 'none';
+    card.replaceChildren(
+      el('div', { class: 'card-band band-' + state },
+        el('span', { class: 'vg', text: STATE_GLYPHS[state] }),
+        STATE_LABELS[state],
+      ),
+      el('div', { class: 'card-body' },
+        el('div', { class: 'card-src' },
+          el('span', { class: 'kind', text: cite.kind.toUpperCase() }),
+          cite.sourceLabel || '',
+        ),
+        cite.kind === 'pdf'
+          ? makeCrop(cite)
+          : el('div', { class: 'excerpt', html: cite.excerptHTML || '' }),
+        el('div', { class: 'card-foot' },
+          el('span', { text: cite.kind === 'web'
+            ? (cite.host || '')
+            : 'Highlighted on page ' + (cite.page || '?') }),
+          el('span', { class: 'cta', text: 'Click to inspect →' }),
+        ),
+      ),
+    );
+  }
+
+  function position(a) {
+    const r = a.getBoundingClientRect();
+    const cw = 420, ch = card.offsetHeight;
+    let left = r.left + r.width / 2 - cw / 2;
+    left = Math.max(12, Math.min(left, window.innerWidth - cw - 12));
+    let top = r.top - ch - 10;
+    if (top < 64) top = r.bottom + 10;
+    card.style.left = left + 'px';
+    card.style.top = top + 'px';
+  }
+
+  document.querySelectorAll('a.cite').forEach((a) => {
+    const cite = CITES[a.dataset.citeId];
+    if (!cite) return;
+    a.addEventListener('mouseenter', () => {
+      clearTimeout(hideT);
+      buildCard(cite);
+      card.classList.add('show');
+      requestAnimationFrame(() => position(a));
+    });
+    a.addEventListener('mouseleave', () => {
+      hideT = setTimeout(() => card.classList.remove('show'), 80);
+    });
+    const open = (e) => { e.preventDefault(); openModal(cite); };
+    a.addEventListener('click', open);
+    a.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') open(e);
+    });
+  });
+
+  // ---- Modal ----
+  const modal = document.getElementById('modal');
+
+  function openModal(cite) {
+    const state = cite.state || 'none';
+    const dBand = document.getElementById('dBand');
+    dBand.className = 'd-band band-' + state;
+    dBand.replaceChildren(
+      el('span', {
+        class: 'vg',
+        style: {
+          width: '22px', height: '22px', borderRadius: '50%',
+          background: 'rgba(255,255,255,.25)', display: 'grid',
+          placeItems: 'center',
+        },
+        text: STATE_GLYPHS[state],
+      }),
+      el('h4', { text: STATE_LABELS[state] }),
+    );
+
+    const body = document.getElementById('dBody');
+    body.replaceChildren();
+
+    body.appendChild(el('div', {
+      class: 'd-claim',
+      text: '“' + (cite.claim || cite.quote || '') + '”',
+    }));
+
+    if (cite.judgeNote) {  // Set by PR 2 (judge integration); always falsy in PR 1.
+      const note = el('div', { class: 'd-note' });
+      note.appendChild(el('b', { text: 'Why the judge says ' + STATE_LABELS[state] }));
+      note.appendChild(document.createTextNode(cite.judgeNote));
+      body.appendChild(note);
+    }
+
+    if (cite.kind === 'pdf') {
+      const page = el('div', { class: 'd-page' });
+      page.appendChild(el('img', {
+        src: REG[cite.slot],
+        alt: 'page ' + (cite.page || '?'),
+      }));
+      page.appendChild(el('div', {
+        class: 'd-page-hl',
+        style: {
+          left: cite.bxPct + '%', top: cite.byPct + '%',
+          width: cite.bwPct + '%', height: cite.bhPct + '%',
+        },
+      }));
+      body.appendChild(page);
+      body.appendChild(el('div', {
+        class: 'd-src',
+        text: (cite.filename || '') + ' — page ' + (cite.page || '?'),
+      }));
+    } else {
+      const excerptStyle = {
+        maxHeight: 'none', webkitMaskImage: 'none', maskImage: 'none',
+        background: '#f7f7f4', borderRadius: '10px', padding: '13px 15px',
+        fontSize: '14px',
+      };
+      body.appendChild(el('div', {
+        class: 'excerpt', style: excerptStyle, html: cite.excerptHTML || '',
+      }));
+      const src = el('div', { class: 'd-src' });
+      const safe = safeUrl(cite.url);
+      if (safe) {
+        const link = el('a', { href: safe, target: '_blank', rel: 'noopener', text: safe });
+        src.appendChild(link);
+      } else {
+        src.appendChild(document.createTextNode(cite.url || ''));
+      }
+      if (cite.fetchedAt) {
+        src.appendChild(document.createTextNode(' · fetched ' + cite.fetchedAt));
+      }
+      body.appendChild(src);
+    }
+
+    card.classList.remove('show');
+    modal.showModal();
+  }
+
+  modal.querySelector('.close').addEventListener('click', () => modal.close());
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.close(); });
+
+  // Deep link: #cite-N opens that cite's modal on load.
+  const hm = location.hash.match(/^#cite-(\d+)$/);
+  if (hm) { const c = CITES[hm[1]]; if (c) openModal(c); }
+})();
 </script>
 </body>
 </html>

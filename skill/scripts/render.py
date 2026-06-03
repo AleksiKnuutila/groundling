@@ -68,6 +68,15 @@ def main():
     p.add_argument("--prep-dir", type=Path, default=None)
     p.add_argument("--corpus", type=Path, default=None)
     p.add_argument("--web-dir", type=Path, default=None)
+    p.add_argument(
+        "--question", default=None,
+        help="The question being answered. Becomes the page <h1>.",
+    )
+    p.add_argument(
+        "--source-summary", default=None, dest="source_summary",
+        help="One-line summary under the title "
+             "(e.g. 'Verified answer · 17 claims checked against ...').",
+    )
     p.add_argument("--answer", type=Path, required=True)
     p.add_argument("--out", type=Path, required=True)
     args = p.parse_args()
@@ -196,6 +205,8 @@ def main():
             image_paths=image_paths,
             image_dims=image_dims,
             scale=2.0,
+            page_title=args.question,
+            subtitle=args.source_summary,
         )
 
     args.out.write_text(html, encoding="utf-8")
