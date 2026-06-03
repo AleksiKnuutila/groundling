@@ -166,6 +166,54 @@ pass reads.
 mkdir -p /tmp/groundling-judge
 ```
 
+#### Pass 1: uncited significant claims
+
+Scan the *rewritten* answer (the markdown render.py just wrote into the
+run dir, with `[N]` footnotes and cite-link rewrites already applied)
+for factual claims that should have had a cite marker but don't. One
+subagent (Task tool / fresh-context prompt) gets the whole answer and
+the corpus index; it returns a JSON array.
+
+Subagent prompt:
+
+    Read this entire answer:
+    <the rewritten answer.md content>
+
+    Available source titles:
+    <bulleted list of pdf filenames + web titles from the corpus>
+
+    Identify factual claims in the answer that:
+      (a) name a specific number, date, attribution, or causal
+          mechanism, AND
+      (b) have NO citation marker ([N], chunk://, or web://) within the
+          same sentence.
+
+    Skip:
+      - Framing prose ("the report covers", "according to the data")
+      - Opinion ("this is concerning", "an interesting finding")
+      - Claims that paraphrase a nearby cited claim
+
+    For each uncited significant claim, output JSON:
+      {"span_text": "exact verbatim substring of the answer",
+       "before_context": "3-8 words immediately preceding the span",
+       "after_context": "3-8 words immediately following the span",
+       "note": "short reasoning (<= 200 chars)"}
+
+    Output a JSON array. Empty array if no uncited claims.
+
+Deposit at `/tmp/groundling-judge/uncited.json`:
+
+    [{"span_text": "...", "before_context": "...",
+      "after_context": "...", "note": "..."},
+     ...]
+
+`span_text` must be a verbatim substring of the rewritten answer.md;
+`before_context` / `after_context` are used to disambiguate when the
+same span appears more than once. The re-render counter
+`uncited_unmatched` flags spans we couldn't locate (usually a
+hallucinated paraphrase) and `uncited_overlap` flags spans that
+landed inside an existing cite link (skip and move on).
+
 #### Pass 2: cited verdicts
 
 For each cite in `manifest.json`, dispatch a fresh subagent (Task tool
@@ -205,8 +253,7 @@ Collect all subagent outputs into `/tmp/groundling-judge/verdicts.json`:
      "2": {"state": "partial",   "note": "..."},
      ...}
 
-Keys are stringified cite_ids matching `manifest.json`. PR 3 will add a
-Pass 1 to flag uncited significant claims; same deposit directory.
+Keys are stringified cite_ids matching `manifest.json`.
 
 #### Re-render with the judge
 
@@ -223,12 +270,17 @@ python /skills/groundling/scripts/render.py \
 ```
 
 The output answer.html will have state-colored cite underlines, a
-working Spotlight toggle, and judge notes in the hover card / modal.
+working Spotlight toggle, judge notes in the hover card / modal, and
+dashed-blue "needs-citation" underlines on any uncited significant
+claims Pass 1 flagged.
 
-stderr also reports two new counters: `verdicts_missing` (cites with no
-verdict — they stay grey) and `verdicts_unmapped` (verdict entries for
-cite_ids the current render didn't produce — usually a stale judge
-deposit; sanity-check the manifest).
+stderr also reports counters from both passes:
+`verdicts_missing` (cites with no verdict — they stay grey),
+`verdicts_unmapped` (verdict entries for cite_ids the current render
+didn't produce — usually a stale judge deposit),
+`uncited_matched` / `uncited_unmatched` / `uncited_overlap` (Pass 1
+spans we wrapped, couldn't locate, or had to skip because they
+overlapped an existing cite link).
 
 ### Step 7: Surface to user
 

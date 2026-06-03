@@ -11,9 +11,14 @@ import fitz
 
 from groundling.answer_html import build_answer_html
 from groundling.extract import extract_words
-from groundling.judge import load_verdicts
+from groundling.judge import load_uncited, load_verdicts
 from groundling.markers import parse_markers, resolve_marker_to_spans
 from groundling.render import render_cite_pdf, render_cite_web
+from groundling.uncited import (
+    WrapInstruction,
+    apply_wraps,
+    find_uncited_spans,
+)
 
 
 DEFAULT_STATE_SUBDIR = "qa-runs"
@@ -72,6 +77,8 @@ def run_render(
     # PR 2: load cited-claim verdicts from /tmp/groundling-judge/ (or any
     # --judge-dir). Empty dict when judge_dir is None / absent / malformed.
     verdicts = load_verdicts(judge_dir)
+    # PR 3: load uncited-claim flags (Pass 1) from same dir.
+    uncited_entries = load_uncited(judge_dir)
 
     counters = {
         "validated": 0,
@@ -80,6 +87,9 @@ def run_render(
         "invalid_url": 0,
         "verdicts_missing": 0,
         "verdicts_unmapped": 0,
+        "uncited_matched": 0,
+        "uncited_unmatched": 0,
+        "uncited_overlap": 0,
     }
 
     # PDF stem -> (words, chunks, pdf_path); load lazily, cache.
@@ -220,6 +230,17 @@ def run_render(
         )
         out = f"{out.rstrip()}\n\n{refs}\n"
 
+    # PR 3: apply uncited wraps on top of the rewritten markdown. Spans
+    # inside existing cite-link constructions are skipped (overlap
+    # counter); spans the judge flagged but we can't locate land in the
+    # unmatched counter. Survivors are wrapped with a raw-HTML <a> that
+    # CommonMark passes through untouched.
+    uncited_wraps: list[WrapInstruction] = []
+    if uncited_entries:
+        uncited_wraps, uc_counters = find_uncited_spans(out, uncited_entries)
+        counters.update(uc_counters)
+        out = apply_wraps(out, uncited_wraps)
+
     # Write manifest.json for parity with v1's run dir shape.
     manifest = {
         "run_id": run_dir.name,
@@ -242,6 +263,14 @@ def run_render(
                 }),
             }
             for r in cite_records
+        ],
+        "uncited": [
+            {
+                "synthetic_id": w.synthetic_id,
+                "span_text": w.span_text,
+                "note": w.note,
+            }
+            for w in uncited_wraps
         ],
     }
     (run_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))

@@ -70,14 +70,21 @@ def build_inline_answer_html(
     page_title: str | None = None,
     subtitle: str | None = None,
     verdicts: dict[int, dict] | None = None,
+    uncited_wraps: list | None = None,
 ) -> str:
     """Build a single self-contained HTML file. See module docstring.
 
     When `verdicts` is non-empty (PR 2), each entry in `cites_by_id`
     gets its `state` overridden with the judge's verdict and a
     `judgeNote` added; the trust-strip Spotlight button is rendered
-    (has_judge_data=True)."""
+    (has_judge_data=True).
+
+    When `uncited_wraps` is non-empty (PR 3), each entry contributes a
+    synthetic `cites_by_id` record keyed by `u1`, `u2`, etc. The
+    hover-card + modal JS look these up by data-cite-id on the
+    pre-wrapped uncited anchors that already live in `answer_md`."""
     verdicts = verdicts or {}
+    uncited_wraps = uncited_wraps or []
     # Slot registry: each unique image path → one data URI.
     path_to_slot: dict[Path, int] = {}
     image_slots: list[str] = []
@@ -144,16 +151,31 @@ def build_inline_answer_html(
             })
         cites_by_id[str(cid)] = entry
 
+    # PR 3: synthetic entries for uncited (Pass 1) spans. The hover-card
+    # + modal JS look these up by data-cite-id (e.g. "u1"). No source
+    # crop/excerpt — the modal shows the judge's note in place of source.
+    for w in uncited_wraps:
+        cites_by_id[w.synthetic_id] = {
+            "id": w.synthetic_id,
+            "kind": "uncited",
+            "state": "needs-citation",
+            "claim": w.span_text,
+            "quote": "",
+            "judgeNote": w.note,
+            "sourceLabel": "No source — judge flagged",
+        }
+
     decorated_body = _decorate_for_inline(answer_md, cite_records, verdicts)
 
     total_cites = len(cite_records)
     if subtitle is None:
         subtitle = f"{total_cites} cites validated" if total_cites else ""
 
-    # PR 2: the Spotlight button only appears once we have verdicts to
-    # spotlight against. Without judge data, every cite stays at
-    # data-state="none" and the toggle would just dim the whole page.
-    has_judge_data = bool(verdicts)
+    # PR 2/3: the Spotlight button appears whenever we have any judge
+    # data — Pass 2 verdicts OR Pass 1 uncited flags. Without either,
+    # every cite stays at data-state="none" and the toggle would just
+    # dim the whole page.
+    has_judge_data = bool(verdicts or uncited_wraps)
 
     template = _env.get_template("answer_inline.html.j2")
     return template.render(

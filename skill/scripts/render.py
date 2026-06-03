@@ -19,9 +19,10 @@ from pathlib import Path
 
 from groundling.answer_html_inline import build_inline_answer_html
 from groundling.extract import extract_words
-from groundling.judge import load_verdicts
+from groundling.judge import load_uncited, load_verdicts
 from groundling.markers import parse_markers, resolve_marker_to_spans
 from groundling.render import render_pdf_page
+from groundling.uncited import apply_wraps, find_uncited_spans
 
 
 def load_web_evidence(web_dir: Path) -> dict[str, dict]:
@@ -96,11 +97,14 @@ def main():
     markers = parse_markers(answer_md)
 
     verdicts = load_verdicts(args.judge_dir)
+    uncited_entries = load_uncited(args.judge_dir)
 
     counters = {"validated": 0, "invalid_chunk": 0, "invalid_quote": 0,
                 "invalid_url": 0, "missing_evidence": 0,
                 "invalid_quote_web": 0,
-                "verdicts_missing": 0, "verdicts_unmapped": 0}
+                "verdicts_missing": 0, "verdicts_unmapped": 0,
+                "uncited_matched": 0, "uncited_unmatched": 0,
+                "uncited_overlap": 0}
 
     web_evidence = load_web_evidence(args.web_dir) if args.web_dir else {}
 
@@ -186,7 +190,10 @@ def main():
         f"missing_evidence={counters['missing_evidence']} "
         f"invalid_quote_web={counters['invalid_quote_web']} "
         f"verdicts_missing={counters['verdicts_missing']} "
-        f"verdicts_unmapped={counters['verdicts_unmapped']}",
+        f"verdicts_unmapped={counters['verdicts_unmapped']} "
+        f"uncited_matched={counters['uncited_matched']} "
+        f"uncited_unmatched={counters['uncited_unmatched']} "
+        f"uncited_overlap={counters['uncited_overlap']}",
         file=sys.stderr,
     )
 
@@ -217,6 +224,19 @@ def main():
                 image_dims[rec["cite_id"]] = image_dims[owner_id]
 
         out_md = _rewrite_to_cite_scheme(answer_md, markers, cite_records)
+
+        # PR 3: locate + wrap uncited spans (Pass 1) before passing to
+        # the HTML builder. The pre-wrapped anchors carry data-cite-id
+        # values like "u1" so the hover-card JS can look them up in the
+        # GROUNDLING_CITES map.
+        uncited_wraps = []
+        if uncited_entries:
+            uncited_wraps, uc_counters = find_uncited_spans(
+                out_md, uncited_entries,
+            )
+            counters.update(uc_counters)
+            out_md = apply_wraps(out_md, uncited_wraps)
+
         html = build_inline_answer_html(
             answer_md=out_md,
             cite_records=cite_records,
@@ -226,6 +246,7 @@ def main():
             page_title=args.question,
             subtitle=args.source_summary,
             verdicts=verdicts,
+            uncited_wraps=uncited_wraps,
         )
 
     args.out.write_text(html, encoding="utf-8")

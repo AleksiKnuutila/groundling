@@ -622,3 +622,88 @@ def test_inline_html_has_judge_data_false_when_empty_dict(tmp_path):
         verdicts={},
     )
     assert 'id="weakBtn"' not in html
+
+
+# --------- PR 3: uncited wraps threaded through inline HTML ---------
+
+def test_inline_html_uncited_entry_in_cites_json(tmp_path):
+    """An uncited wrap entry surfaces in GROUNDLING_CITES with the
+    needs-citation state + uncited kind + judgeNote."""
+    from groundling.uncited import WrapInstruction
+    fake_png = tmp_path / "1.png"
+    fake_png.write_bytes(TINY_PNG)
+    cite_records = [{
+        "cite_id": 1, "kind": "pdf",
+        "spans": [{"page": 1, "bbox": [10.0, 20.0, 30.0, 40.0]}],
+        "marker_quote": "q", "claim_text": "c",
+        "pdf_filename": "doc.pdf",
+    }]
+    # The answer markdown already contains the pre-wrapped uncited anchor
+    # (this is what render.py's apply_wraps would produce).
+    answer_md = (
+        '[c](cite://1 "q"). Also <a class="cite" role="button" '
+        'tabindex="0" data-cite-id="u1" data-kind="uncited" '
+        'data-state="needs-citation" data-judge-note="no source">'
+        'a vague claim</a> here.'
+    )
+    uw = [WrapInstruction(
+        start=0, end=0, span_text="a vague claim",
+        note="no source", synthetic_id="u1",
+    )]
+    html = build_inline_answer_html(
+        answer_md=answer_md, cite_records=cite_records,
+        image_paths={1: fake_png}, image_dims={1: (1, 1)}, scale=2.0,
+        uncited_wraps=uw,
+    )
+    # Uncited entry in GROUNDLING_CITES, keyed by synthetic id.
+    assert '"u1"' in html
+    assert '"kind":"uncited"' in html
+    assert '"state":"needs-citation"' in html
+    assert '"judgeNote":"no source"' in html
+    # The pre-wrapped anchor survived rendering.
+    assert 'data-state="needs-citation"' in html
+    assert 'data-cite-id="u1"' in html
+
+
+def test_inline_html_uncited_triggers_spotlight_button(tmp_path):
+    """Even without verdicts, uncited_wraps alone makes has_judge_data True."""
+    from groundling.uncited import WrapInstruction
+    uw = [WrapInstruction(
+        start=0, end=0, span_text="x", note="n", synthetic_id="u1",
+    )]
+    html = build_inline_answer_html(
+        answer_md='just some text',
+        cite_records=[],
+        image_paths={}, image_dims={}, scale=2.0,
+        uncited_wraps=uw,
+    )
+    assert 'id="weakBtn"' in html
+
+
+def test_inline_html_uncited_has_judge_note_in_anchor(tmp_path):
+    """The pre-wrapped uncited anchor carries data-judge-note in the
+    output HTML — the hover card reads it without going through the
+    decorate regex (which only matches cite:// hrefs)."""
+    from groundling.uncited import WrapInstruction, apply_wraps
+    answer_md = apply_wraps(
+        "X has a vague claim here.",
+        [WrapInstruction(
+            start=len("X has "),
+            end=len("X has ") + len("a vague claim"),
+            span_text="a vague claim",
+            note="judge said no source",
+            synthetic_id="u1",
+        )],
+    )
+    uw = [WrapInstruction(
+        start=0, end=0, span_text="a vague claim",
+        note="judge said no source", synthetic_id="u1",
+    )]
+    html = build_inline_answer_html(
+        answer_md=answer_md, cite_records=[],
+        image_paths={}, image_dims={}, scale=2.0,
+        uncited_wraps=uw,
+    )
+    assert 'data-judge-note="judge said no source"' in html
+    # And the synthetic entry is in the cites JSON.
+    assert '"judgeNote":"judge said no source"' in html
