@@ -197,11 +197,15 @@ def test_run_render_writes_answer_html_with_cite_decoration(tmp_path, text_pdf):
     html = html_path.read_text()
     # Page shell.
     assert "<!doctype html>" in html or "<!DOCTYPE html>" in html
-    assert '<aside class="cite-pane"' in html
+    # Trust strip + modal markup (replaces the old side pane).
+    assert 'class="trustbar"' in html
+    assert 'id="modal"' in html
+    assert 'id="modalFrame"' in html
     # Cite decoration arrived through the full pipeline.
     assert 'class="cite"' in html
     assert 'data-cite-id="1"' in html
     assert 'data-kind="pdf"' in html
+    assert 'data-state="none"' in html
     assert 'data-img="cites/1.png"' in html
     # Mobile fall-through media query.
     assert "(hover: hover)" in html
@@ -218,4 +222,8 @@ def test_run_render_answer_html_handles_zero_cites(tmp_path, text_pdf):
     html = html_path.read_text()
     assert 'class="cite"' not in html
     # Page shell still present.
-    assert '<aside class="cite-pane"' in html
+    assert 'class="trustbar"' in html
+    assert 'id="modal"' in html
+    assert 'id="modalFrame"' in html
+    # Zero-cite tally still rendered.
+    assert '<b>0</b> cites validated' in html

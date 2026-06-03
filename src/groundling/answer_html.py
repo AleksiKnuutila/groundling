@@ -40,8 +40,12 @@ def build_cite_attrs(
     attrs = {
         "data-cite-id": str(cite_record["cite_id"]),
         "data-kind": cite_record["kind"],
+        "data-state": "none",  # PR 2 overrides per verdicts.json.
     }
     if cite_record["kind"] != "pdf":
+        url = cite_record.get("url")
+        if url:
+            attrs["data-url"] = url
         return attrs
 
     # Union bbox across all spans (PDF points).
@@ -83,7 +87,7 @@ def decorate_answer_html(
     scale: float,
 ) -> str:
     """Render answer_md to HTML and decorate cite anchors with
-    `class="cite"` + data-* attributes + a child <span class="preview">.
+    `class="cite"` + data-* attributes.
 
     Non-cite links (any other href) are left untouched.
 
@@ -128,7 +132,7 @@ def decorate_answer_html(
         )
         return (
             f'<a class="cite" href="{href}"{rest} {attrs_str}>'
-            f'{inner}<span class="preview"></span></a>'
+            f'{inner}</a>'
         )
 
     return anchor_re.sub(_replace, rendered_html)
@@ -141,11 +145,13 @@ def build_answer_html(
     image_dims: dict[int, tuple[str, int, int]],
     run_dir_name: str,
     scale: float = 2.0,
+    page_title: str | None = None,
+    subtitle: str | None = None,
 ) -> str:
     """Build the full answer.html page from the rewritten markdown.
 
     Returns a self-contained HTML string. Cite anchors are decorated
-    for hover preview + click-to-side-pane behaviour."""
+    for hover preview + click-to-modal-iframe behaviour."""
     answer_html = decorate_answer_html(
         answer_md=answer_md,
         cite_records=cite_records,
@@ -153,5 +159,14 @@ def build_answer_html(
         run_dir_name=run_dir_name,
         scale=scale,
     )
+    total_cites = len(cite_records)
+    if subtitle is None:
+        subtitle = f"{total_cites} cites validated" if total_cites else ""
     template = _env.get_template("answer.html.j2")
-    return template.render(answer_html=answer_html)
+    return template.render(
+        answer_html=answer_html,
+        page_title=page_title,
+        subtitle=subtitle,
+        total_cites=total_cites,
+        has_judge_data=False,  # PR 2 sets this when verdicts.json is present.
+    )

@@ -17,6 +17,7 @@ def test_build_cite_attrs_pdf_single_span():
     assert attrs == {
         "data-cite-id": "1",
         "data-kind": "pdf",
+        "data-state": "none",  # PR 2 overrides per verdicts.json.
         "data-img": "cites/1.png",
         "data-img-w": "1240",
         "data-img-h": "1754",
@@ -57,7 +58,31 @@ def test_build_cite_attrs_web():
         cite_record, image_filename=None, image_w_px=None, image_h_px=None,
         scale=2.0,
     )
-    assert attrs == {"data-cite-id": "3", "data-kind": "web"}
+    assert attrs == {
+        "data-cite-id": "3",
+        "data-kind": "web",
+        "data-state": "none",
+    }
+
+
+def test_build_cite_attrs_web_with_url():
+    """Web cites with a url field surface it as data-url so the run-dir
+    hover card can show the real URL instead of a generic label."""
+    cite_record = {
+        "cite_id": 4,
+        "kind": "web",
+        "url": "https://example.com/article",
+    }
+    attrs = build_cite_attrs(
+        cite_record, image_filename=None, image_w_px=None, image_h_px=None,
+        scale=2.0,
+    )
+    assert attrs == {
+        "data-cite-id": "4",
+        "data-kind": "web",
+        "data-state": "none",
+        "data-url": "https://example.com/article",
+    }
 
 
 import re
@@ -91,10 +116,11 @@ def test_decorate_answer_html_wrap_cite_decorated():
     assert 'class="cite"' in html
     assert 'data-cite-id="1"' in html
     assert 'data-kind="pdf"' in html
+    assert 'data-state="none"' in html
     assert 'data-img="cites/1.png"' in html
     assert 'data-bx="20"' in html
-    # The child preview span is there.
-    assert '<span class="preview"></span>' in html
+    # The dormant preview span has been removed from decorate output.
+    assert 'class="preview"' not in html
     # The link text survives.
     assert ">the revenue figure<" in html
 
@@ -196,15 +222,84 @@ def test_build_answer_html_emits_full_page():
     )
     # Doctype + page shell.
     assert html.startswith("<!doctype html>") or html.startswith("<!DOCTYPE html>")
-    # Decorated cite anchor.
-    assert 'class="cite"' in html
-    # Side pane markup.
-    assert '<aside class="cite-pane"' in html
-    assert '<iframe' in html
-    # JS hooks: hover-capability check + pane-open class.
+    # Trust strip with brand + cite tally.
+    assert 'class="trustbar"' in html
+    assert '<b>1</b> cites validated' in html
+    # Spotlight toggle ABSENT in PR 1 (has_judge_data=False).
+    assert 'id="weakBtn"' not in html
+    # Hover card element exists.
+    assert 'id="card"' in html
+    # Modal + iframe (replacing the old side pane).
+    assert 'id="modal"' in html
+    assert 'id="modalFrame"' in html
+    # Mobile-fallthrough media query still gates the modal-click path.
     assert "(hover: hover)" in html
-    assert "pane-open" in html
-    # Cite highlight CSS — at least the background colour rule.
-    assert ".cite" in html
-    # Preview popover CSS.
-    assert ".preview" in html
+    # Decorated cite anchor with data-state="none" default.
+    assert 'class="cite"' in html
+    assert 'data-state="none"' in html
+    assert 'data-cite-id="1"' in html
+    # Dormant preview span is gone.
+    assert 'class="preview"' not in html
+
+
+def test_build_answer_html_renders_page_title_and_subtitle():
+    """When page_title and subtitle are passed, they appear in the h1
+    and .sub div respectively."""
+    html = build_answer_html(
+        answer_md='hello',
+        cite_records=[],
+        image_dims={},
+        run_dir_name='test',
+        page_title='What does the doc say?',
+        subtitle='Custom subtitle here',
+    )
+    assert '<h1>What does the doc say?</h1>' in html
+    assert '<div class="sub">Custom subtitle here</div>' in html
+
+
+def test_build_answer_html_default_subtitle_zero_cites():
+    """When subtitle is None and there are zero cites, the .sub div is
+    empty (no subtitle text rendered)."""
+    html = build_answer_html(
+        answer_md='hello',
+        cite_records=[],
+        image_dims={},
+        run_dir_name='test',
+    )
+    # Empty subtitle should NOT emit a .sub div (it's gated on a truthy
+    # subtitle in the template).
+    assert '<div class="sub">' not in html
+
+
+def test_build_answer_html_default_subtitle_with_cites():
+    """When subtitle is None but there are cites, the default
+    'N cites validated' subtitle is rendered."""
+    cite_records = _records({
+        "cite_id": 1, "kind": "pdf",
+        "spans": [{"page": 1, "bbox": [10.0, 20.0, 30.0, 40.0]}],
+    })
+    html = build_answer_html(
+        answer_md='[claim](http://localhost:8123/run-x/cites/1.html "q")',
+        cite_records=cite_records,
+        image_dims={1: ("1.png", 1240, 1754)},
+        run_dir_name='run-x',
+    )
+    assert '<div class="sub">1 cites validated</div>' in html
+
+
+def test_build_answer_html_web_cite_emits_data_url():
+    """Web cites with a url surface it as data-url on the anchor so
+    the hover card can show the real URL."""
+    answer_md = (
+        '[news](http://localhost:8123/run-x/cites/1.html "the quote")'
+    )
+    cite_records = _records({
+        "cite_id": 1, "kind": "web", "url": "https://example.com/story",
+    })
+    html = build_answer_html(
+        answer_md=answer_md,
+        cite_records=cite_records,
+        image_dims={},
+        run_dir_name='run-x',
+    )
+    assert 'data-url="https://example.com/story"' in html

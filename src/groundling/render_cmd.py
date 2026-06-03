@@ -54,6 +54,7 @@ def run_render(
     answer_md: str,
     state_dir: Path | None,
     web_base: str = DEFAULT_WEB_BASE,
+    question: str | None = None,
 ) -> RenderResult:
     # Default state dir is sibling to prep dir, under the corpus root.
     if state_dir is None:
@@ -120,6 +121,7 @@ def run_render(
             next_id += 1
             cite_records.append({
                 "marker": m, "cite_id": next_id, "kind": "web",
+                "url": m.url,
             })
             counters["validated"] += 1
 
@@ -255,6 +257,7 @@ def run_render(
         image_dims=image_dims,
         run_dir_name=run_dir.name,
         scale=2.0,
+        page_title=question,
     )
     (run_dir / "answer.html").write_text(answer_html, encoding="utf-8")
 

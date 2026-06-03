@@ -3,143 +3,247 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Answer</title>
+<title>{{ page_title or "Answer" }}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap" rel="stylesheet">
 <style>
-  body { font: 16px/1.55 system-ui, sans-serif; color: #222; margin: 0; display: flex; }
-  main.answer { flex: 1 1 auto; padding: 32px 40px; max-width: 760px; transition: flex-basis 0.2s, max-width 0.2s; }
-  body.pane-open main.answer { margin-right: 40%; max-width: none; }
-  body.pane-open aside.cite-pane { display: flex; }
+  :root {
+    --ink: #1a1c1e; --ink-soft: #565b61; --line: #e6e6e2; --paper: #fbfbf9;
+    --sup: #2f8a52; --par: #a9760a; --uns: #c43d2c; --cit: #3160a8;
+    --accent: #2a2c2e;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--paper); color: var(--ink);
+    font-family: "IBM Plex Sans", system-ui, sans-serif; font-size: 17px; line-height: 1.62; }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 0 28px 140px; }
 
-  main.answer h1, main.answer h2, main.answer h3 { line-height: 1.25; }
-  main.answer p { margin: 0.8em 0; }
-  main.answer ul, main.answer ol { padding-left: 1.4em; }
+  /* ---- Header strip ---- */
+  .trustbar { position: sticky; top: 0; z-index: 30; background: rgba(251,251,249,.92);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
+    margin: 0 -28px 36px; padding: 14px 28px; display: flex; align-items: center; gap: 18px; }
+  .brand { font-family: "Newsreader", serif; font-size: 19px; letter-spacing: .2px; }
+  .brand b { font-weight: 500; }
+  .brand .dot { color: var(--sup); }
+  .tally { flex: 1; display: flex; gap: 13px; font-family: "IBM Plex Mono", monospace;
+    font-size: 12px; color: var(--ink-soft); white-space: nowrap; }
+  .tally b { color: var(--ink); }
+  .toggle { font: inherit; font-size: 13px; border: 1px solid var(--line); background: #fff;
+    color: var(--ink); padding: 7px 12px; border-radius: 8px; cursor: pointer; white-space: nowrap; }
+  .toggle[aria-pressed="true"] { background: var(--accent); color: #fff; border-color: var(--accent); }
 
-  a.cite {
-    background: #fff7c2;
-    border-bottom: 1px solid #e0c000;
-    text-decoration: none;
-    color: inherit;
-    padding: 0 2px;
-    position: relative;
-    cursor: pointer;
-  }
-  a.cite:hover { background: #ffeb80; }
+  /* ---- Title + subtitle ---- */
+  h1 { font-family: "Newsreader", serif; font-weight: 500; font-size: 33px; line-height: 1.2;
+    letter-spacing: -.2px; margin: 6px 0 4px; }
+  .sub { color: var(--ink-soft); font-size: 14px; margin-bottom: 30px;
+    font-family: "IBM Plex Mono", monospace; }
 
-  /* Hover preview popover. PDF cites use the page image as a CSS
-     background, positioned so the bbox centre sits at the popover
-     centre. Web cites get a quote-only card via a separate rule. */
-  a.cite .preview {
-    display: none;
-    position: absolute;
-    bottom: 1.6em;
-    left: 0;
-    width: 480px;
-    height: 280px;
-    border: 1px solid #bbb;
-    box-shadow: 0 6px 24px rgba(0,0,0,0.2);
-    background-color: #fff;
-    background-repeat: no-repeat;
-    z-index: 100;
-    overflow: hidden;
-    border-radius: 4px;
-  }
-  a.cite:hover .preview { display: block; }
-  a.cite[data-kind="pdf"] .preview {
-    background-image: var(--img);
-    background-size: var(--img-w) var(--img-h);
-    background-position:
-      calc(240px - var(--bx) - var(--bw) / 2)
-      calc(140px - var(--by) - var(--bh) / 2);
-  }
-  a.cite[data-kind="pdf"] .preview::after {
-    content: "";
-    position: absolute;
-    left: calc(240px - var(--bw) / 2);
-    top:  calc(140px - var(--bh) / 2);
-    width: var(--bw);
-    height: var(--bh);
-    background: rgba(255, 235, 0, 0.35);
-    border: 1px solid rgba(200, 160, 0, 0.6);
-  }
+  /* ---- Answer body ---- */
+  main h2 { font-family: "Newsreader", serif; font-weight: 500; font-size: 24px; margin: 38px 0 6px; }
+  main h3 { font-size: 14px; text-transform: uppercase; letter-spacing: .09em; color: var(--ink-soft);
+    margin: 30px 0 2px; font-weight: 600; }
+  main p { margin: 14px 0; }
+  main ul, main ol { padding-left: 1.4em; }
 
-  aside.cite-pane {
-    display: none;
-    position: fixed;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    width: 40%;
-    border-left: 1px solid #ddd;
-    background: #fafafa;
-  }
-  aside.cite-pane iframe {
-    width: 100%; height: 100%; border: 0;
-  }
-  aside.cite-pane .close {
-    position: absolute; top: 8px; right: 12px;
-    background: #fff; border: 1px solid #ccc; border-radius: 4px;
-    width: 28px; height: 28px; cursor: pointer;
-    font-size: 18px; line-height: 1; padding: 0;
-    z-index: 10;
-  }
-  aside.cite-pane .close:hover { background: #eee; }
+  /* ---- Inline cite styling ---- */
+  a.cite { color: inherit; text-decoration: none; cursor: pointer; padding-bottom: 1px;
+    border-bottom: 2px solid #cfcfca; }
+  a.cite[data-state="supported"]    { border-color: #bfe0cb; }
+  a.cite[data-state="partial"]      { border-color: var(--par); }
+  a.cite[data-state="unsupported"]  { border-color: var(--uns); }
+  a.cite[data-state="needs-citation"]{ border-color: var(--cit); border-bottom-style: dashed; }
+  a.cite[data-state="partial"]::before,
+  a.cite[data-state="unsupported"]::before,
+  a.cite[data-state="needs-citation"]::before {
+    content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+    margin-right: 3px; vertical-align: 1px; }
+  a.cite[data-state="partial"]::before { background: var(--par); }
+  a.cite[data-state="unsupported"]::before { background: var(--uns); }
+  a.cite[data-state="needs-citation"]::before { background: var(--cit); }
+  a.cite:hover { background: #fffceb; }
+  a.cite:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-  @media (hover: none) {
-    a.cite .preview { display: none !important; }
-  }
+  body.weak a.cite[data-state="supported"],
+  body.weak a.cite:not([data-state]),
+  body.weak a.cite[data-state="none"] { border-color: var(--line); color: var(--ink-soft); }
+  body.weak a.cite[data-state="supported"]:hover { color: var(--ink); }
+
+  /* ---- Hover card ---- */
+  #card { position: fixed; z-index: 50; width: 360px; background: #fff; border: 1px solid var(--line);
+    border-radius: 12px; box-shadow: 0 16px 44px -14px rgba(20,20,20,.34); overflow: hidden;
+    opacity: 0; transform: translateY(4px); pointer-events: none; transition: opacity .12s, transform .12s; }
+  #card.show { opacity: 1; transform: translateY(0); }
+  .card-band { display: flex; align-items: center; gap: 9px; padding: 10px 14px; font-size: 13px;
+    font-weight: 600; color: #fff; }
+  .card-band .vg { width: 18px; height: 18px; border-radius: 50%; background: rgba(255,255,255,.25);
+    display: grid; place-items: center; font-size: 12px; }
+  .band-supported { background: var(--sup); }
+  .band-partial   { background: var(--par); }
+  .band-unsupported { background: var(--uns); }
+  .band-needs-citation { background: var(--cit); }
+  .band-none { background: var(--ink-soft); }
+  .card-body { padding: 13px 14px 14px; }
+  .card-src { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--ink-soft);
+    display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+  .card-src .kind { background: #f0f0ec; padding: 2px 6px; border-radius: 5px; }
+  .card-foot { margin-top: 6px; font-size: 11.5px; color: var(--ink-soft); display: flex;
+    justify-content: space-between; align-items: center; }
+  .card-foot .cta { color: var(--accent); font-weight: 600; }
+
+  /* ---- Modal (with iframe) ---- */
+  dialog.detail { border: none; border-radius: 14px; padding: 0; max-width: 90vw; width: 1000px;
+    height: 80vh; box-shadow: 0 30px 80px -20px rgba(0,0,0,.5); }
+  dialog.detail::backdrop { background: rgba(20,22,24,.42); backdrop-filter: blur(2px); }
+  dialog.detail iframe { width: 100%; height: 100%; border: 0; display: block;
+    border-radius: 14px; background: #fff; }
+  .close { position: absolute; top: 14px; right: 16px; width: 30px; height: 30px; border-radius: 50%;
+    border: 1px solid var(--line); background: #fff; color: var(--ink); font-size: 17px; cursor: pointer;
+    z-index: 1; }
+
+  @media (hover: none) { #card { display: none !important; } }
   @media (max-width: 700px) {
-    body.pane-open main.answer { margin-right: 0; }
-    body.pane-open aside.cite-pane { display: none; }
+    dialog.detail { width: 96vw; height: 90vh; }
   }
 </style>
 </head>
 <body>
-<main class="answer">
+<div class="wrap">
+  <div class="trustbar">
+    <div class="brand"><b>Groundling</b><span class="dot">.</span></div>
+    <div class="tally" id="tally">
+      <span><b>{{ total_cites }}</b> cites validated</span>
+    </div>
+    {% if has_judge_data %}
+    <button class="toggle" id="weakBtn" aria-pressed="false">Spotlight weak claims</button>
+    {% endif %}
+  </div>
+  {% if page_title %}<h1>{{ page_title }}</h1>{% endif %}
+  {% if subtitle %}<div class="sub">{{ subtitle }}</div>{% endif %}
+  <main>
 {{ answer_html | safe }}
-</main>
-<aside class="cite-pane" hidden>
-  <button class="close" aria-label="Close">×</button>
-  <iframe src="about:blank" title="Cite source"></iframe>
-</aside>
+  </main>
+</div>
+
+<div id="card" role="tooltip"></div>
+
+<dialog class="detail" id="modal">
+  <button class="close" aria-label="Close">&times;</button>
+  <iframe id="modalFrame" src="about:blank" title="Cite source"></iframe>
+</dialog>
+
 <script>
-  (function () {
-    const pane = document.querySelector('aside.cite-pane');
-    const iframe = pane.querySelector('iframe');
-    const closeBtn = pane.querySelector('.close');
+(function () {
+  const STATE_LABELS = {
+    supported: 'Supported', partial: 'Partial', unsupported: 'Unsupported',
+    'needs-citation': 'Needs citation', none: 'Cite',
+  };
+  const STATE_GLYPHS = {
+    supported: '✓', partial: '~', unsupported: '✕',
+    'needs-citation': '+', none: '·',
+  };
 
-    // Inject per-cite CSS custom props from data-* (the page-image url
-    // can't sit in static CSS, and CSS calc() math needs the geometry
-    // as CSS units).
-    document.querySelectorAll('a.cite[data-kind="pdf"]').forEach(a => {
-      a.style.setProperty('--img', `url("${a.dataset.img}")`);
-      a.style.setProperty('--img-w', a.dataset.imgW + 'px');
-      a.style.setProperty('--img-h', a.dataset.imgH + 'px');
-      a.style.setProperty('--bx', a.dataset.bx + 'px');
-      a.style.setProperty('--by', a.dataset.by + 'px');
-      a.style.setProperty('--bw', a.dataset.bw + 'px');
-      a.style.setProperty('--bh', a.dataset.bh + 'px');
-    });
+  function el(tag, props, ...children) {
+    const e = document.createElement(tag);
+    if (props) {
+      for (const k of Object.keys(props)) {
+        const v = props[k];
+        if (k === 'class') e.className = v;
+        else if (k === 'style' && typeof v === 'object') Object.assign(e.style, v);
+        else if (k === 'text') e.textContent = v;
+        else e.setAttribute(k, v);
+      }
+    }
+    for (const c of children) {
+      if (c == null) continue;
+      e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
+    }
+    return e;
+  }
 
-    document.querySelectorAll('a.cite').forEach(a => {
-      a.addEventListener('click', e => {
-        if (!window.matchMedia('(hover: hover)').matches) return;
-        e.preventDefault();
-        iframe.src = a.getAttribute('href');
-        pane.hidden = false;
-        document.body.classList.add('pane-open');
-      });
+  // Spotlight toggle (only present when has_judge_data).
+  const weakBtn = document.getElementById('weakBtn');
+  if (weakBtn) {
+    weakBtn.addEventListener('click', () => {
+      const on = weakBtn.getAttribute('aria-pressed') === 'true';
+      weakBtn.setAttribute('aria-pressed', String(!on));
+      document.body.classList.toggle('weak', !on);
     });
+  }
 
-    closeBtn.addEventListener('click', () => {
-      pane.hidden = true;
-      iframe.src = 'about:blank';
-      document.body.classList.remove('pane-open');
-    });
+  // ---- Hover card ----
+  const card = document.getElementById('card');
+  let hideT;
 
-    document.addEventListener('keydown', e => {
-      if (e.key === 'Escape' && !pane.hidden) closeBtn.click();
+  function sourceLabelFor(a) {
+    if (a.dataset.kind === 'pdf') {
+      // data-img is the cite page image url (e.g. "cites/3.png"); not
+      // useful as a label. Use cite_id as a fallback identifier.
+      return 'Source page ' + a.dataset.citeId;
+    }
+    return a.dataset.url || 'Web source';
+  }
+
+  function buildCard(a) {
+    const state = a.dataset.state || 'none';
+    card.replaceChildren(
+      el('div', { class: 'card-band band-' + state },
+        el('span', { class: 'vg', text: STATE_GLYPHS[state] }),
+        STATE_LABELS[state],
+      ),
+      el('div', { class: 'card-body' },
+        el('div', { class: 'card-src' },
+          el('span', { class: 'kind', text: a.dataset.kind ? a.dataset.kind.toUpperCase() : 'CITE' }),
+          sourceLabelFor(a),
+        ),
+        el('div', { class: 'card-foot' },
+          el('span', { text: '' }),
+          el('span', { class: 'cta', text: 'Click to inspect →' }),
+        ),
+      ),
+    );
+  }
+
+  function position(a) {
+    const r = a.getBoundingClientRect();
+    const cw = 360, ch = card.offsetHeight;
+    let left = r.left + r.width / 2 - cw / 2;
+    left = Math.max(12, Math.min(left, window.innerWidth - cw - 12));
+    let top = r.top - ch - 10;
+    if (top < 64) top = r.bottom + 10;
+    card.style.left = left + 'px';
+    card.style.top = top + 'px';
+  }
+
+  // ---- Modal ----
+  const modal = document.getElementById('modal');
+
+  document.querySelectorAll('a.cite').forEach((a) => {
+    a.addEventListener('mouseenter', () => {
+      clearTimeout(hideT);
+      buildCard(a);
+      card.classList.add('show');
+      requestAnimationFrame(() => position(a));
     });
-  })();
+    a.addEventListener('mouseleave', () => {
+      hideT = setTimeout(() => card.classList.remove('show'), 80);
+    });
+    a.addEventListener('click', (e) => {
+      if (!window.matchMedia('(hover: hover)').matches) return;
+      e.preventDefault();
+      const href = a.getAttribute('href');
+      if (!href) return;
+      document.getElementById('modalFrame').src = href;
+      card.classList.remove('show');
+      modal.showModal();
+    });
+  });
+
+  modal.querySelector('.close').addEventListener('click', () => modal.close());
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.close(); });
+  modal.addEventListener('close', () => {
+    document.getElementById('modalFrame').src = 'about:blank';
+  });
+})();
 </script>
 </body>
 </html>

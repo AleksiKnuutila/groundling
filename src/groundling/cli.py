@@ -58,6 +58,10 @@ def render(
             "your terminal doesn't make file:// links clickable."
         ),
     ),
+    question: str = typer.Option(
+        None, "--question",
+        help="The question being answered. Shown as the page title in answer.html.",
+    ),
 ):
     """Validate agent markers, generate cite HTML, rewrite markdown."""
     import sys
@@ -68,7 +72,7 @@ def render(
         answer_md = Path(answer).read_text(encoding="utf-8")
     result = run_render(
         prep_dir=prep_dir, answer_md=answer_md, state_dir=state_dir,
-        web_base=web_base,
+        web_base=web_base, question=question,
     )
     typer.echo(result.markdown)
     parts = [f"{k}={v}" for k, v in result.counters.items()]
