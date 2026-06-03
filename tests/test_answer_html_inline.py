@@ -680,6 +680,31 @@ def test_inline_html_uncited_triggers_spotlight_button(tmp_path):
     assert 'id="weakBtn"' in html
 
 
+def test_inline_html_web_cite_url_carries_text_fragment():
+    """Web cites' url field should be the #:~:text=... augmented form so
+    the modal's outbound link highlights the cited passage on the live
+    page."""
+    records = [{
+        'cite_id': 1, 'kind': 'web',
+        'marker_quote': 'the cited passage',
+        'claim_text': 'a claim',
+        'url': 'https://example.com/article',
+        'title': 'Article Title',
+        'fetched_at': '2026-06-01T00:00:00Z',
+        'excerpt': 'context the cited passage more context',
+        'quote_offset_in_excerpt': 8,
+    }]
+    html = build_inline_answer_html(
+        answer_md='X [c](cite://1).',
+        cite_records=records,
+        image_paths={}, image_dims={},
+    )
+    # The url field in the cites JSON must include the text fragment.
+    assert '#:~:text=the%20cited%20passage' in html, html[:3000]
+    # The host label should remain the raw hostname (no fragment).
+    assert '"host":"example.com"' in html
+
+
 def test_inline_html_uncited_has_judge_note_in_anchor(tmp_path):
     """The pre-wrapped uncited anchor carries data-judge-note in the
     output HTML — the hover card reads it without going through the

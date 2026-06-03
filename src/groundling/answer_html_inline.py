@@ -16,6 +16,8 @@ from pathlib import Path
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from markdown_it import MarkdownIt
 
+from groundling.render import build_text_fragment_url
+
 
 def _json_for_html(obj) -> str:
     """JSON-encode `obj` safely for embedding inside a <script> tag.
@@ -141,8 +143,16 @@ def build_inline_answer_html(
                     host = host[4:]
             except Exception:
                 host = ""
+            # Build a Text Fragment URL so clicking the modal's outbound
+            # link highlights the cited passage on the live page (parity
+            # with the run-dir path's cite_web.html.j2). The `host` label
+            # stays derived from the original URL — fragments shouldn't
+            # appear in the displayed hostname.
+            fragment_url = build_text_fragment_url(
+                rec["url"], rec["marker_quote"],
+            )
             entry.update({
-                "url": rec["url"],
+                "url": fragment_url,
                 "host": host,
                 "title": rec.get("title", ""),
                 "fetchedAt": rec.get("fetched_at", ""),

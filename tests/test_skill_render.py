@@ -117,6 +117,86 @@ def test_skill_render_handles_embedded_quote_in_point_marker(tmp_path, text_pdf)
     assert "validated=1" in result.stderr
 
 
+def test_skill_render_writes_manifest_json(tmp_path, text_pdf):
+    """skill/scripts/render.py must emit a manifest.json with cite
+    records for the judge to consume in Pass 2."""
+    corpus = tmp_path / "corpus"; corpus.mkdir()
+    shutil.copy(text_pdf, corpus / "doc1.pdf")
+    prep_out = tmp_path / "prep"
+    subprocess.run(
+        [sys.executable, str(SKILL_PREP),
+         "--corpus", str(corpus), "--out", str(prep_out)],
+        check=True,
+    )
+    chunks = json.loads((prep_out / "doc1.chunks.json").read_text())
+    first = next(c for c in chunks if c["text"])
+    cid, quote = first["chunk_id"], first["text"].split()[0]
+    answer = f'See [the opening](chunk://doc1/{cid} "{quote}") here.'
+    (tmp_path / "answer.md").write_text(answer, encoding="utf-8")
+
+    out_html = tmp_path / "answer.html"
+    manifest_path = tmp_path / "manifest.json"
+    result = subprocess.run(
+        [sys.executable, str(SKILL_RENDER),
+         "--prep-dir", str(prep_out),
+         "--corpus", str(corpus),
+         "--answer", str(tmp_path / "answer.md"),
+         "--out", str(out_html),
+         "--manifest-out", str(manifest_path)],
+        capture_output=True, text=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert manifest_path.exists(), "manifest.json not written"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert "citations" in manifest and isinstance(manifest["citations"], list)
+    assert "counters" in manifest
+    assert manifest["answer_html_path"] == str(out_html)
+    assert len(manifest["citations"]) == 1
+    entry = manifest["citations"][0]
+    assert entry["cite_id"] == 1
+    assert entry["kind"] == "pdf"
+    assert entry["claim_text"] == "the opening"
+    assert entry["cited_text"] == quote
+    assert entry["pdf_stem"] == "doc1"
+    assert entry["chunk_id"] == cid
+
+
+def test_skill_render_manifest_includes_web_cite(tmp_path):
+    """Web cites in the manifest should carry url instead of pdf_stem/chunk_id."""
+    web_dir = tmp_path / "web"; web_dir.mkdir()
+    (web_dir / "01.json").write_text(json.dumps({
+        "url": "https://example.com/a",
+        "title": "Article",
+        "fetched_at": "2026-06-02T00:00:00Z",
+        "extracted_text": "Lorem ipsum the cited passage dolor sit amet.",
+    }), encoding="utf-8")
+    answer = (
+        'A claim [the cited passage]'
+        '(web://https://example.com/a "the cited passage") supports.'
+    )
+    (tmp_path / "answer.md").write_text(answer, encoding="utf-8")
+
+    out_html = tmp_path / "answer.html"
+    manifest_path = tmp_path / "manifest.json"
+    result = subprocess.run(
+        [sys.executable, str(SKILL_RENDER),
+         "--web-dir", str(web_dir),
+         "--answer", str(tmp_path / "answer.md"),
+         "--out", str(out_html),
+         "--manifest-out", str(manifest_path)],
+        capture_output=True, text=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert len(manifest["citations"]) == 1
+    entry = manifest["citations"][0]
+    assert entry["kind"] == "web"
+    assert entry["url"] == "https://example.com/a"
+    assert entry["cited_text"] == "the cited passage"
+    assert "pdf_stem" not in entry
+    assert "chunk_id" not in entry
+
+
 def test_skill_render_prints_validation_counters(tmp_path, text_pdf):
     """Stderr summary includes validated / invalid_* counters."""
     corpus = tmp_path / "corpus"; corpus.mkdir()

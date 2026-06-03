@@ -140,7 +140,8 @@ spans we couldn't locate (usually a hallucinated paraphrase) and
 
 ### Pass 2: cited verdicts (batched)
 
-Read `manifest.json` for the list of cites that need judging. For each
+Read `<run_dir>/manifest.json` (written by Step 3 render — the path
+printed on stdout) for the list of cites that need judging. For each
 cite, you have access to its `claim_text`, its `cited_text` (quote), and
 its source pointer (PDF stem + chunk_id, or web url).
 

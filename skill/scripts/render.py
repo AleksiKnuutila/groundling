@@ -86,6 +86,14 @@ def main():
         help="Directory containing verdicts.json (Pass 2 — cited verdicts). "
              "Default: no judge decoration.",
     )
+    p.add_argument(
+        "--manifest-out", type=Path,
+        default=Path("/tmp/groundling-prep/manifest.json"),
+        dest="manifest_out",
+        help="Path to write the per-render manifest.json — the cite list "
+             "the judge consumes in Pass 2. Default: "
+             "/tmp/groundling-prep/manifest.json.",
+    )
     args = p.parse_args()
 
     if not args.prep_dir and not args.web_dir:
@@ -250,7 +258,38 @@ def main():
         )
 
     args.out.write_text(html, encoding="utf-8")
+
+    # Emit manifest.json — the cite list the judge consumes in Pass 2.
+    # SKILL.md tells the model to read this file to enumerate cites;
+    # without it the model falls back to self-attestation, which is
+    # exactly the bias the judge is meant to mitigate.
+    manifest_citations = []
+    for r in cite_records:
+        m = r["marker"]
+        entry = {
+            "cite_id": r["cite_id"],
+            "kind": r["kind"],
+            "claim_text": m.claim_text,
+            "cited_text": m.quote,
+        }
+        if r["kind"] == "pdf":
+            entry["pdf_stem"] = m.pdf_stem
+            entry["chunk_id"] = m.chunk_id
+        else:  # web
+            entry["url"] = m.url
+        manifest_citations.append(entry)
+    manifest = {
+        "answer_html_path": str(args.out),
+        "counters": counters,
+        "citations": manifest_citations,
+    }
+    args.manifest_out.parent.mkdir(parents=True, exist_ok=True)
+    args.manifest_out.write_text(
+        json.dumps(manifest, indent=2), encoding="utf-8",
+    )
+
     print(f"wrote {args.out} ({len(cite_records)} cites)", file=sys.stderr)
+    print(f"wrote {args.manifest_out}", file=sys.stderr)
 
 
 def _rewrite_to_cite_scheme(answer_md, markers, cite_records):

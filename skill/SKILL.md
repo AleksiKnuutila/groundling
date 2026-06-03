@@ -205,9 +205,10 @@ landed inside an existing cite link (skip and move on).
 
 #### Pass 2: cited verdicts (batched)
 
-Read `manifest.json` for the list of cites that need judging. For each
-cite, you have access to its `claim_text`, its `cited_text` (quote), and
-its source pointer (PDF stem + chunk_id, or web url).
+Read `/tmp/groundling-prep/manifest.json` for the list of cites that need
+judging. For each cite, you have access to its `claim_text`, its
+`cited_text` (quote), and its source pointer (PDF stem + chunk_id, or
+web url).
 
 Gather the source excerpts ONCE up front:
   - For each PDF cite, locate the matching chunk in
