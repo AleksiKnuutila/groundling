@@ -26,7 +26,7 @@ def _json_for_html(obj) -> str:
     the four hazardous code points with their escaped JS-string forms.
     Same trick Flask's `tojson` filter uses."""
     return (
-        json.dumps(obj)
+        json.dumps(obj, separators=(",", ":"))
         .replace("<", "\\u003c")
         .replace(">", "\\u003e")
         .replace("&", "\\u0026")
@@ -69,8 +69,15 @@ def build_inline_answer_html(
     scale: float = 2.0,
     page_title: str | None = None,
     subtitle: str | None = None,
+    verdicts: dict[int, dict] | None = None,
 ) -> str:
-    """Build a single self-contained HTML file. See module docstring."""
+    """Build a single self-contained HTML file. See module docstring.
+
+    When `verdicts` is non-empty (PR 2), each entry in `cites_by_id`
+    gets its `state` overridden with the judge's verdict and a
+    `judgeNote` added; the trust-strip Spotlight button is rendered
+    (has_judge_data=True)."""
+    verdicts = verdicts or {}
     # Slot registry: each unique image path → one data URI.
     path_to_slot: dict[Path, int] = {}
     image_slots: list[str] = []
@@ -85,13 +92,16 @@ def build_inline_answer_html(
     cites_by_id: dict[str, dict] = {}
     for rec in cite_records:
         cid = rec["cite_id"]
+        verdict = verdicts.get(cid)
         entry: dict = {
             "id": cid,
             "kind": rec["kind"],
-            "state": "none",  # PR 2 overrides
+            "state": (verdict or {}).get("state", "none"),
             "claim": rec.get("claim_text") or "",
             "quote": rec["marker_quote"],
         }
+        if verdict and verdict.get("note"):
+            entry["judgeNote"] = verdict["note"]
         if rec["kind"] == "pdf":
             image_w, image_h = image_dims[cid]
             x0 = min(s["bbox"][0] for s in rec["spans"])
@@ -134,17 +144,16 @@ def build_inline_answer_html(
             })
         cites_by_id[str(cid)] = entry
 
-    decorated_body = _decorate_for_inline(answer_md, cite_records)
+    decorated_body = _decorate_for_inline(answer_md, cite_records, verdicts)
 
     total_cites = len(cite_records)
     if subtitle is None:
         subtitle = f"{total_cites} cites validated" if total_cites else ""
 
-    # PR 2 sets this to True when verdicts.json is present. PR 1 leaves
-    # every cite at data-state="none" so the Spotlight toggle would just
-    # dim the whole page — hide the button until there's something to
-    # actually spotlight.
-    has_judge_data = False
+    # PR 2: the Spotlight button only appears once we have verdicts to
+    # spotlight against. Without judge data, every cite stays at
+    # data-state="none" and the toggle would just dim the whole page.
+    has_judge_data = bool(verdicts)
 
     template = _env.get_template("answer_inline.html.j2")
     return template.render(
@@ -158,7 +167,7 @@ def build_inline_answer_html(
     )
 
 
-def _decorate_for_inline(answer_md, cite_records):
+def _decorate_for_inline(answer_md, cite_records, verdicts=None):
     """Render markdown to HTML; rewrite cite://N anchors to a.cite with
     data-* attrs. Per-cite imagery and excerpts live in
     window.GROUNDLING_CITES (server-side JSON), not in DOM."""
@@ -166,6 +175,7 @@ def _decorate_for_inline(answer_md, cite_records):
     md.validateLink = lambda url: True
     rendered = md.render(answer_md)
 
+    verdicts = verdicts or {}
     records_by_id = {r["cite_id"]: r for r in cite_records}
     anchor_re = re.compile(
         r'<a\s+href="cite://(\d+)"([^>]*)>(.*?)</a>', re.DOTALL,
@@ -177,13 +187,18 @@ def _decorate_for_inline(answer_md, cite_records):
         rec = records_by_id.get(cid)
         if rec is None:
             return m.group(0)
+        verdict = verdicts.get(cid)
+        state = (verdict or {}).get("state", "none")
         # data-cite-id + data-kind + data-state. Everything else lives in
         # window.GROUNDLING_CITES, looked up by id.
         attrs = (
             f'data-cite-id="{cid}" '
             f'data-kind="{rec["kind"]}" '
-            f'data-state="none"'
+            f'data-state="{state}"'
         )
+        if verdict and verdict.get("note"):
+            note_attr = html_lib.escape(verdict["note"], quote=True)
+            attrs += f' data-judge-note="{note_attr}"'
         # No href: in the Claude.ai artifact iframe, navigating to
         # #cite-N bubbles a fragment change to the parent frame, which
         # tries to navigate claudeusercontent.com instead of opening

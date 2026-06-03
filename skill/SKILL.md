@@ -151,7 +151,86 @@ python /skills/groundling/scripts/render.py \
 At least one of `--prep-dir` (with `--corpus`) or `--web-dir` must
 be present. Pass both when the answer mixes PDF and web cites.
 
-### Step 6: Surface to user
+### Step 6: Judge the cites (default-on)
+
+**Run the judge by default.** Skip ONLY if the user has asked for a
+quick answer ("just the answer, no checking", "skip the judge", "don't
+verify the cites"). When in doubt, run it — verifiability is the point
+of this skill.
+
+The judge runs in two passes against the artifacts render just produced.
+Both deposit JSON files at `/tmp/groundling-judge/` that a second render
+pass reads.
+
+```bash
+mkdir -p /tmp/groundling-judge
+```
+
+#### Pass 2: cited verdicts
+
+For each cite in `manifest.json`, dispatch a fresh subagent (Task tool
+in Claude Code; fresh-context prompt in claude.ai web) with this exact
+input:
+
+    Source excerpt:
+      <chunk text from prep_dir/<stem>.chunks.json for the cite's
+       chunk_id, OR ±300 chars of extracted_text around the quote
+       for web cites>
+
+    Source label: <pdf_stem · page N | url>
+
+    Claim from the answer:
+      <the claim_text from the cite record, OR the sentence in
+       answer.md that contains the cite for point markers>
+
+    Cited quote:
+      "<quote from the cite record>"
+
+    Does the source excerpt support the claim? Answer in ONE of:
+    - supported: the source directly says what the claim says, or
+      is the precise basis for the claimed fact
+    - partial: the source says something related — adjacent, weaker,
+      broader, or narrower — but doesn't fully back the specific
+      claim
+    - unsupported: the source is irrelevant, says something different,
+      or actively contradicts the claim
+
+    Output JSON ONLY, no prose:
+    {"state": "supported|partial|unsupported",
+     "note": "<= 200 chars explaining the call"}
+
+Collect all subagent outputs into `/tmp/groundling-judge/verdicts.json`:
+
+    {"1": {"state": "supported", "note": "..."},
+     "2": {"state": "partial",   "note": "..."},
+     ...}
+
+Keys are stringified cite_ids matching `manifest.json`. PR 3 will add a
+Pass 1 to flag uncited significant claims; same deposit directory.
+
+#### Re-render with the judge
+
+After both passes deposit their JSON (Pass 1 may be empty if no uncited
+claims), re-invoke render with `--judge-dir`:
+
+```bash
+python /skills/groundling/scripts/render.py \
+    --prep-dir /tmp/groundling-prep \
+    --corpus <pdf-dir> \
+    --answer /tmp/answer.md \
+    --out /tmp/answer.html \
+    --judge-dir /tmp/groundling-judge
+```
+
+The output answer.html will have state-colored cite underlines, a
+working Spotlight toggle, and judge notes in the hover card / modal.
+
+stderr also reports two new counters: `verdicts_missing` (cites with no
+verdict — they stay grey) and `verdicts_unmapped` (verdict entries for
+cite_ids the current render didn't produce — usually a stale judge
+deposit; sanity-check the manifest).
+
+### Step 7: Surface to user
 
 Print the answer markdown to the conversation, with cite markers
 rewritten to clickable deep links into the HTML artifact:

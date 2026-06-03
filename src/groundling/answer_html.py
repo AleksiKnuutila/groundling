@@ -32,17 +32,24 @@ def build_cite_attrs(
     image_w_px: int | None,
     image_h_px: int | None,
     scale: float,
+    verdict: dict | None = None,
 ) -> dict[str, str]:
     """Compute the data-* attributes for one cite anchor.
 
     PDF cites get image + union-bbox geometry; web cites get just
     cite_id + kind. All bbox values are in image pixels (PDF points
-    times scale)."""
+    times scale).
+
+    When `verdict` is supplied (from verdicts.json), its `state` becomes
+    `data-state` and the optional `note` becomes `data-judge-note`."""
+    state = (verdict or {}).get("state", "none")
     attrs = {
         "data-cite-id": str(cite_record["cite_id"]),
         "data-kind": cite_record["kind"],
-        "data-state": "none",  # PR 2 overrides per verdicts.json.
+        "data-state": state,
     }
+    if verdict and verdict.get("note"):
+        attrs["data-judge-note"] = verdict["note"]
     if cite_record["kind"] != "pdf":
         url = cite_record.get("url")
         if url:
@@ -86,6 +93,7 @@ def decorate_answer_html(
     image_dims: dict[int, tuple[str, int, int]],
     run_dir_name: str,
     scale: float,
+    verdicts: dict[int, dict] | None = None,
 ) -> str:
     """Render answer_md to HTML and decorate cite anchors with
     `class="cite"` + data-* attributes.
@@ -93,8 +101,13 @@ def decorate_answer_html(
     Non-cite links (any other href) are left untouched.
 
     image_dims maps cite_id -> (image_filename, image_w_px, image_h_px)
-    for PDF cites. Web cites are absent."""
+    for PDF cites. Web cites are absent.
+
+    `verdicts` maps cite_id -> {state, note} from verdicts.json (PR 2).
+    When set, each cite anchor's data-state reflects the verdict and a
+    data-judge-note carries the explanation."""
     records_by_id = {r["cite_id"]: r for r in cite_records}
+    verdicts = verdicts or {}
 
     md = MarkdownIt("commonmark").enable("table")
     # Allow file:// URLs so local-file cite hrefs survive rendering.
@@ -127,6 +140,7 @@ def decorate_answer_html(
             image_w_px=image_w_px,
             image_h_px=image_h_px,
             scale=scale,
+            verdict=verdicts.get(cite_id),
         )
         attrs_str = " ".join(
             f'{k}="{html.escape(v, quote=True)}"' for k, v in attrs.items()
@@ -148,17 +162,23 @@ def build_answer_html(
     scale: float = 2.0,
     page_title: str | None = None,
     subtitle: str | None = None,
+    verdicts: dict[int, dict] | None = None,
 ) -> str:
     """Build the full answer.html page from the rewritten markdown.
 
     Returns a self-contained HTML string. Cite anchors are decorated
-    for hover preview + click-to-modal-iframe behaviour."""
+    for hover preview + click-to-modal-iframe behaviour.
+
+    When `verdicts` is non-empty (PR 2), each cite anchor's data-state
+    reflects the judge's call and the trust-strip Spotlight button is
+    rendered (has_judge_data=True)."""
     answer_html = decorate_answer_html(
         answer_md=answer_md,
         cite_records=cite_records,
         image_dims=image_dims,
         run_dir_name=run_dir_name,
         scale=scale,
+        verdicts=verdicts,
     )
     total_cites = len(cite_records)
     if subtitle is None:
@@ -169,5 +189,5 @@ def build_answer_html(
         page_title=page_title,
         subtitle=subtitle,
         total_cites=total_cites,
-        has_judge_data=False,  # PR 2 sets this when verdicts.json is present.
+        has_judge_data=bool(verdicts),
     )

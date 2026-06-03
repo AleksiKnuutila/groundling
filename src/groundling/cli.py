@@ -62,6 +62,11 @@ def render(
         None, "--question",
         help="The question being answered. Shown as the page title in answer.html.",
     ),
+    judge_dir: Path = typer.Option(
+        None, "--judge-dir",
+        help="Directory containing verdicts.json (Pass 2 — cited verdicts). "
+             "Default: no judge decoration.",
+    ),
 ):
     """Validate agent markers, generate cite HTML, rewrite markdown."""
     import sys
@@ -72,7 +77,7 @@ def render(
         answer_md = Path(answer).read_text(encoding="utf-8")
     result = run_render(
         prep_dir=prep_dir, answer_md=answer_md, state_dir=state_dir,
-        web_base=web_base, question=question,
+        web_base=web_base, question=question, judge_dir=judge_dir,
     )
     typer.echo(result.markdown)
     parts = [f"{k}={v}" for k, v in result.counters.items()]

@@ -11,6 +11,7 @@ import fitz
 
 from groundling.answer_html import build_answer_html
 from groundling.extract import extract_words
+from groundling.judge import load_verdicts
 from groundling.markers import parse_markers, resolve_marker_to_spans
 from groundling.render import render_cite_pdf, render_cite_web
 
@@ -55,6 +56,7 @@ def run_render(
     state_dir: Path | None,
     web_base: str = DEFAULT_WEB_BASE,
     question: str | None = None,
+    judge_dir: Path | None = None,
 ) -> RenderResult:
     # Default state dir is sibling to prep dir, under the corpus root.
     if state_dir is None:
@@ -67,11 +69,17 @@ def run_render(
 
     markers = parse_markers(answer_md)
 
+    # PR 2: load cited-claim verdicts from /tmp/groundling-judge/ (or any
+    # --judge-dir). Empty dict when judge_dir is None / absent / malformed.
+    verdicts = load_verdicts(judge_dir)
+
     counters = {
         "validated": 0,
         "invalid_chunk": 0,
         "invalid_quote": 0,
         "invalid_url": 0,
+        "verdicts_missing": 0,
+        "verdicts_unmapped": 0,
     }
 
     # PDF stem -> (words, chunks, pdf_path); load lazily, cache.
@@ -124,6 +132,18 @@ def run_render(
                 "url": m.url,
             })
             counters["validated"] += 1
+
+    # PR 2: cross-reference verdicts against this render's cite_records.
+    # verdicts_missing  — cites that have no judge verdict (will stay at
+    #                     data-state="none").
+    # verdicts_unmapped — verdict entries for cite_ids that didn't survive
+    #                     validation in this render (likely a stale judge
+    #                     run pointing at a previous render).
+    if verdicts:
+        verdict_cite_ids = set(verdicts.keys())
+        record_cite_ids = {r["cite_id"] for r in cite_records}
+        counters["verdicts_missing"] = len(record_cite_ids - verdict_cite_ids)
+        counters["verdicts_unmapped"] = len(verdict_cite_ids - record_cite_ids)
 
     # Generate HTML for each surviving cite.
     rendered_pages: dict[tuple[Path, int], int] = {}
@@ -258,6 +278,7 @@ def run_render(
         run_dir_name=run_dir.name,
         scale=2.0,
         page_title=question,
+        verdicts=verdicts,
     )
     (run_dir / "answer.html").write_text(answer_html, encoding="utf-8")
 

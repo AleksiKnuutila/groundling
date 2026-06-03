@@ -81,6 +81,77 @@ If the user's terminal doesn't make `file://` links clickable, pass
 serve` in a second shell — that serves the state dir over HTTP so
 cite links open in a browser.
 
+## Step 4: judge the cites (default-on)
+
+**Run the judge by default after rendering.** Skip ONLY if the user
+asked for a quick answer ("just the answer, no checking", "skip the
+judge", "don't verify the cites"). Verifiability is the point of this
+project — when in doubt, run it.
+
+The judge runs as a second pass that decorates each cite with a verdict.
+It deposits JSON into `/tmp/groundling-judge/` and re-invokes render
+with `--judge-dir`, which stamps `data-state` and `data-judge-note`
+onto every cite anchor and turns on the Spotlight toggle.
+
+```bash
+mkdir -p /tmp/groundling-judge
+```
+
+### Pass 2: cited verdicts
+
+For each cite in the run's `manifest.json`, dispatch a fresh Task
+subagent with this exact prompt (fill the bracketed slots from
+`manifest.json` + the corresponding `chunks.json` / web evidence):
+
+    Source excerpt:
+      <chunk text from <prep_dir>/<stem>.chunks.json for the cite's
+       chunk_id, OR ±300 chars of extracted_text around the quote
+       for web cites>
+
+    Source label: <pdf_stem · page N | url>
+
+    Claim from the answer:
+      <the claim_text from the cite record, OR the sentence in
+       answer.md that contains the cite for point markers>
+
+    Cited quote:
+      "<quote from the cite record>"
+
+    Does the source excerpt support the claim? Answer in ONE of:
+    - supported: the source directly says what the claim says, or
+      is the precise basis for the claimed fact
+    - partial: the source says something related — adjacent, weaker,
+      broader, or narrower — but doesn't fully back the specific
+      claim
+    - unsupported: the source is irrelevant, says something different,
+      or actively contradicts the claim
+
+    Output JSON ONLY, no prose:
+    {"state": "supported|partial|unsupported",
+     "note": "<= 200 chars explaining the call"}
+
+Collect all subagent outputs into `/tmp/groundling-judge/verdicts.json`:
+
+    {"1": {"state": "supported", "note": "..."},
+     "2": {"state": "partial",   "note": "..."},
+     ...}
+
+Keys are stringified cite_ids matching `manifest.json`.
+
+### Re-render with the judge
+
+After all subagents return, re-invoke render with `--judge-dir`:
+
+    groundling render <prep_dir> --answer /tmp/answer.md \
+        --judge-dir /tmp/groundling-judge
+
+The resulting `answer.html` carries state-colored cite underlines, a
+working Spotlight toggle, and judge notes in the hover card / modal.
+stderr reports two new counters: `verdicts_missing` (cites with no
+verdict — they stay grey) and `verdicts_unmapped` (verdict entries
+for cite_ids the current render didn't produce — usually a stale judge
+deposit pointing at a previous render).
+
 ---
 
 State lives under `<corpus>/qa-runs/` (gitignore it). Cache under

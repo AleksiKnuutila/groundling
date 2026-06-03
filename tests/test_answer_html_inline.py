@@ -343,8 +343,9 @@ def test_inline_html_web_cite_deep_link_still_works(tmp_path):
         image_paths={}, image_dims={}, scale=2.0,
     )
     # The cite id appears in the JSON map (no per-cite <dialog id="cite-N">
-    # element anymore — one shared modal looks up by id).
-    assert '"id": 1' in html
+    # element anymore — one shared modal looks up by id). Compact JSON
+    # has no space after the colon.
+    assert '"id":1' in html
     # The hash-handler is the JS pathway that opens the modal.
     assert "location.hash.match" in html
 
@@ -499,3 +500,125 @@ def test_build_excerpt_html_asserts_quote_at_offset():
     import pytest
     with pytest.raises(AssertionError):
         _build_excerpt_html("before quote after", "quote", q_off=0)
+
+
+# --------- PR 2: verdicts threaded through inline HTML ---------
+
+import pytest
+
+
+@pytest.mark.parametrize("state", ["supported", "partial", "unsupported"])
+def test_inline_html_verdict_state_on_cite_anchor(tmp_path, state):
+    """Each valid verdict state should appear as data-state on the anchor."""
+    fake_png = tmp_path / "1.png"
+    fake_png.write_bytes(TINY_PNG)
+    cite_records = [{
+        "cite_id": 1, "kind": "pdf",
+        "spans": [{"page": 1, "bbox": [10.0, 20.0, 30.0, 40.0]}],
+        "marker_quote": "q", "claim_text": "c",
+        "pdf_filename": "doc.pdf",
+    }]
+    html = build_inline_answer_html(
+        answer_md='[c](cite://1 "q")',
+        cite_records=cite_records,
+        image_paths={1: fake_png}, image_dims={1: (1, 1)}, scale=2.0,
+        verdicts={1: {"state": state, "note": f"why {state}"}},
+    )
+    assert f'data-state="{state}"' in html
+    # The judge note flows into the cites_json (JSON-encoded).
+    assert f'why {state}' in html
+    # Spotlight button visible because verdicts is non-empty.
+    assert 'id="weakBtn"' in html
+
+
+def test_inline_html_judge_note_in_cites_json(tmp_path):
+    """The judge note appears as `judgeNote` in the GROUNDLING_CITES JSON."""
+    fake_png = tmp_path / "1.png"
+    fake_png.write_bytes(TINY_PNG)
+    cite_records = [{
+        "cite_id": 1, "kind": "pdf",
+        "spans": [{"page": 1, "bbox": [10.0, 20.0, 30.0, 40.0]}],
+        "marker_quote": "q", "claim_text": "c",
+        "pdf_filename": "doc.pdf",
+    }]
+    html = build_inline_answer_html(
+        answer_md='[c](cite://1 "q")',
+        cite_records=cite_records,
+        image_paths={1: fake_png}, image_dims={1: (1, 1)}, scale=2.0,
+        verdicts={1: {"state": "partial", "note": "adjacent figure"}},
+    )
+    # JSON key `judgeNote` is present (json.dumps emits ASCII keys).
+    assert "judgeNote" in html
+    assert "adjacent figure" in html
+
+
+def test_inline_html_no_verdicts_keeps_state_none(tmp_path):
+    """verdicts=None (or empty) preserves PR 1 default: data-state=none."""
+    fake_png = tmp_path / "1.png"
+    fake_png.write_bytes(TINY_PNG)
+    cite_records = [{
+        "cite_id": 1, "kind": "pdf",
+        "spans": [{"page": 1, "bbox": [10.0, 20.0, 30.0, 40.0]}],
+        "marker_quote": "q", "claim_text": "c",
+        "pdf_filename": "doc.pdf",
+    }]
+    html = build_inline_answer_html(
+        answer_md='[c](cite://1 "q")',
+        cite_records=cite_records,
+        image_paths={1: fake_png}, image_dims={1: (1, 1)}, scale=2.0,
+        verdicts=None,
+    )
+    assert 'data-state="none"' in html
+    # No judge note attribute when there's no verdict.
+    assert 'data-judge-note' not in html
+    # Spotlight button hidden — no verdicts.
+    assert 'id="weakBtn"' not in html
+
+
+def test_inline_html_partial_verdicts_other_cites_stay_none(tmp_path):
+    """Only the cites named in verdicts get a state — others stay 'none'."""
+    fake_png = tmp_path / "1.png"
+    fake_png.write_bytes(TINY_PNG)
+    cite_records = [
+        {"cite_id": 1, "kind": "pdf",
+         "spans": [{"page": 1, "bbox": [10.0, 20.0, 30.0, 40.0]}],
+         "marker_quote": "q1", "claim_text": "c1",
+         "pdf_filename": "doc.pdf"},
+        {"cite_id": 2, "kind": "pdf",
+         "spans": [{"page": 1, "bbox": [50.0, 60.0, 70.0, 80.0]}],
+         "marker_quote": "q2", "claim_text": "c2",
+         "pdf_filename": "doc.pdf"},
+    ]
+    html = build_inline_answer_html(
+        answer_md=(
+            '[c1](cite://1 "q1") and [c2](cite://2 "q2").'
+        ),
+        cite_records=cite_records,
+        image_paths={1: fake_png, 2: fake_png},
+        image_dims={1: (1, 1), 2: (1, 1)}, scale=2.0,
+        verdicts={1: {"state": "supported", "note": "ok"}},
+    )
+    # Cite 1 has a verdict; cite 2 stays at default.
+    assert 'data-state="supported"' in html
+    assert 'data-state="none"' in html
+    # Spotlight button visible since verdicts dict is non-empty.
+    assert 'id="weakBtn"' in html
+
+
+def test_inline_html_has_judge_data_false_when_empty_dict(tmp_path):
+    """verdicts={} → no Spotlight button, same as None."""
+    fake_png = tmp_path / "1.png"
+    fake_png.write_bytes(TINY_PNG)
+    cite_records = [{
+        "cite_id": 1, "kind": "pdf",
+        "spans": [{"page": 1, "bbox": [10.0, 20.0, 30.0, 40.0]}],
+        "marker_quote": "q", "claim_text": "c",
+        "pdf_filename": "doc.pdf",
+    }]
+    html = build_inline_answer_html(
+        answer_md='[c](cite://1 "q")',
+        cite_records=cite_records,
+        image_paths={1: fake_png}, image_dims={1: (1, 1)}, scale=2.0,
+        verdicts={},
+    )
+    assert 'id="weakBtn"' not in html

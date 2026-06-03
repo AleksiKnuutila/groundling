@@ -19,6 +19,7 @@ from pathlib import Path
 
 from groundling.answer_html_inline import build_inline_answer_html
 from groundling.extract import extract_words
+from groundling.judge import load_verdicts
 from groundling.markers import parse_markers, resolve_marker_to_spans
 from groundling.render import render_pdf_page
 
@@ -79,6 +80,11 @@ def main():
     )
     p.add_argument("--answer", type=Path, required=True)
     p.add_argument("--out", type=Path, required=True)
+    p.add_argument(
+        "--judge-dir", type=Path, default=None, dest="judge_dir",
+        help="Directory containing verdicts.json (Pass 2 — cited verdicts). "
+             "Default: no judge decoration.",
+    )
     args = p.parse_args()
 
     if not args.prep_dir and not args.web_dir:
@@ -89,9 +95,12 @@ def main():
     answer_md = args.answer.read_text(encoding="utf-8")
     markers = parse_markers(answer_md)
 
+    verdicts = load_verdicts(args.judge_dir)
+
     counters = {"validated": 0, "invalid_chunk": 0, "invalid_quote": 0,
                 "invalid_url": 0, "missing_evidence": 0,
-                "invalid_quote_web": 0}
+                "invalid_quote_web": 0,
+                "verdicts_missing": 0, "verdicts_unmapped": 0}
 
     web_evidence = load_web_evidence(args.web_dir) if args.web_dir else {}
 
@@ -162,13 +171,22 @@ def main():
             })
             counters["validated"] += 1
 
+    # PR 2: cross-reference verdicts against this render's cite_records.
+    if verdicts:
+        verdict_cite_ids = set(verdicts.keys())
+        record_cite_ids = {r["cite_id"] for r in cite_records}
+        counters["verdicts_missing"] = len(record_cite_ids - verdict_cite_ids)
+        counters["verdicts_unmapped"] = len(verdict_cite_ids - record_cite_ids)
+
     print(
         f"validated={counters['validated']} "
         f"invalid_chunk={counters['invalid_chunk']} "
         f"invalid_quote={counters['invalid_quote']} "
         f"invalid_url={counters['invalid_url']} "
         f"missing_evidence={counters['missing_evidence']} "
-        f"invalid_quote_web={counters['invalid_quote_web']}",
+        f"invalid_quote_web={counters['invalid_quote_web']} "
+        f"verdicts_missing={counters['verdicts_missing']} "
+        f"verdicts_unmapped={counters['verdicts_unmapped']}",
         file=sys.stderr,
     )
 
@@ -207,6 +225,7 @@ def main():
             scale=2.0,
             page_title=args.question,
             subtitle=args.source_summary,
+            verdicts=verdicts,
         )
 
     args.out.write_text(html, encoding="utf-8")
