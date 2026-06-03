@@ -182,7 +182,6 @@ def test_cli_instructions_prints_template(tmp_path, monkeypatch):
     result = runner.invoke(app, ["instructions"])
     assert result.exit_code == 0
     assert "# Grounded Q&A — groundling" in result.stdout
-    assert "Mode A" in result.stdout
-    assert "Mode B" in result.stdout
+    assert "Marker contract" in result.stdout
     # Does NOT write anything to disk.
     assert not (tmp_path / "AGENTS.md").exists()

@@ -1,46 +1,16 @@
 # Grounded Q&A — groundling
 
-This project has two modes for answering corpus questions. Pick based on
-whether `ANTHROPIC_API_KEY` is set in your environment.
+This project answers corpus questions using your Claude subscription:
+prep + agent + render. The marker contract below is mandatory —
+deviating breaks citation validation and produces no clickable links.
 
----
-
-## Mode A: API-backed (when `ANTHROPIC_API_KEY` is set)
-
-When the user asks a research question and there's a `docs/` folder of PDFs,
-answer it by running:
-
-    groundling ask --corpus docs/ "<question>"
-
-The command prints markdown to stdout. Each cited claim is a clickable link.
-Pass the markdown through to the user verbatim. PDF citations open a local
-HTML page with the rendered PDF page and the cited text highlighted; web
-citations (opt-in via `--web-search`) open the source URL with the cited
-sentence highlighted natively by the browser.
-
-If the user wants the answer to also draw on current web sources, add
-`--web-search`. Default is docs-only.
-
-Exit codes: 0 success, 2 no PDFs, 3 unextractable PDF (scan), 5 zero
-citations.
-
----
-
-## Mode B: Agent-driven (no API key, or you prefer using your subscription)
-
-When `ANTHROPIC_API_KEY` is NOT set, or the user wants to use their Claude
-subscription instead of paying per-token, answer corpus questions via
-prep + render instead of `groundling ask`. The marker contract below is
-mandatory: deviating breaks citation validation and produces no clickable
-links.
-
-### Step 1: prep
+## Step 1: prep
 
     groundling prep --corpus docs/
 
 Capture stdout (the prep dir path). Read `<prep_dir>/dispatch_hint.json`.
 
-### Step 2: dispatch decision
+## Step 2: dispatch decision
 
 If `recommend == "in_session"`:
 - Read each `<pdf-stem>.linearized.txt` in this session via the Read tool.
@@ -56,7 +26,7 @@ If `recommend == "subagent_fanout"`:
   outputs.** Do not invent new markers; do not paraphrase quoted text
   inside markers.
 
-### Marker contract
+## Marker contract
 
 Two shapes — **prefer the wrapping form when you can name the claim
 the citation supports**.
@@ -87,7 +57,7 @@ The chunk_id is the bracketed label in the linearized text (e.g.
 that chunk's text. Render-time validation drops cites where the chunk
 is unknown or the quote is not found.
 
-### Step 3: render
+## Step 3: render
 
     echo "<your answer markdown>" | groundling render <prep_dir> --answer -
 

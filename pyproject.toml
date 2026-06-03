@@ -12,21 +12,16 @@ dependencies = [
   "pymupdf>=1.24",
   "jinja2>=3.1",
   "typer>=0.12",
-  "python-dotenv>=1.0",
   "markdown-it-py>=3.0",
 ]
 
-[project.optional-dependencies]
-# Mode A (`groundling ask`) calls the Anthropic Messages API. The
-# skill itself only uses Mode B (prep + render), so this stays out
-# of the skill bundle — keeps the cp-version-bound binary wheels
-# (jiter, pydantic_core, markupsafe) off the install path.
-api = ["anthropic>=0.40"]
-
 [dependency-groups]
+# anthropic + python-dotenv are only needed by skill/api_smoke*.py — the
+# end-to-end smoke tests that exercise the Claude Skill via the real API.
 dev = [
   "pytest>=8.0",
   "anthropic>=0.40",
+  "python-dotenv>=1.0",
 ]
 
 [project.scripts]

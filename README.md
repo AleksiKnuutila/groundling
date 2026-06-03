@@ -1,23 +1,17 @@
 # groundling
 
 Grounded Q&A over a folder of PDFs, with cite links you can click to
-verify. Designed for use from Claude Code (or any AGENTS.md-aware
-agent).
+verify. Designed as a Claude Skill — runs entirely in Claude's
+code-execution sandbox or as a Claude Code skill, using your Claude
+subscription rather than per-token API billing.
 
-Two modes — pick based on what you have:
-
-- **Mode A — API-backed.** `groundling ask "..."` calls the Anthropic
-  Messages API with citations enabled. Single command, pay-per-token.
-- **Mode B — agent-driven.** `groundling prep` + agent fan-out +
-  `groundling render` uses your Claude subscription. The agent reads
-  per-PDF linearized text, emits cite markers, render validates them
-  into clickable links.
-
-Both modes produce `answer.md` + a self-contained `answer.html`
+The model reads per-PDF linearized text, emits cite markers next to
+its claims, and `groundling render` validates the markers into
+clickable links. Output is `answer.md` + a self-contained `answer.html`
 browser view with cite highlights, hover-to-preview-PDF popovers,
 and click-opens-side-pane source viewing.
 
-## Install
+## Install (CLI)
 
     pipx install git+https://github.com/AleksiKnuutila/groundling.git
     # or, if you use uv:
@@ -35,9 +29,8 @@ In the agent session:
 
     > what does Q1 say about revenue growth?
 
-The agent reads AGENTS.md, picks the appropriate mode (Mode A if
-`ANTHROPIC_API_KEY` is set, Mode B otherwise), runs groundling, prints
-the answer with cite links.
+The agent reads AGENTS.md, runs `groundling prep` + `groundling
+render`, and prints the answer with cite links.
 
 ## Browser viewing
 
@@ -54,9 +47,8 @@ source PDF region; click to open the full cite page in a side pane.
 | --- | --- |
 | `groundling init` | Drop or refresh AGENTS.md in cwd |
 | `groundling instructions` | Print AGENTS.md template to stdout |
-| `groundling ask` | Mode A: one-shot question via Anthropic API |
-| `groundling prep` | Mode B step 1: per-PDF chunks + linearized text |
-| `groundling render` | Mode B step 2: validate agent cite markers → answer.md + answer.html |
+| `groundling prep` | Per-PDF chunks + linearized text |
+| `groundling render` | Validate agent cite markers → answer.md + answer.html |
 | `groundling serve` | Static HTTP server for cite pages (default port 8123) |
 
 Run any command with `--help` for full flag listings.
@@ -123,7 +115,7 @@ Per corpus directory:
 
 - `qa-runs/<run-id>/` — one subdir per question, contains `answer.md`,
   `answer.html`, `manifest.json`, `cites/N.html`+`cites/N.png`.
-- `.groundling-prep/<stamp>/` — mode-B chunks + linearized text +
+- `.groundling-prep/<stamp>/` — chunks + linearized text +
   `dispatch_hint.json`.
 - `.groundling-cache/` — per-PDF word-extraction cache.
 
@@ -131,22 +123,25 @@ All three are gitignore candidates.
 
 ## How it works
 
-See `docs/plans/` for design docs covering each mode and the
-intermediate artefacts:
+See `docs/plans/` for design docs:
 
-- `2026-05-30-groundling-design.md` — Mode A: Anthropic Messages API with citations enabled
-- `2026-05-30-agent-mode-design.md` — Mode B: prep + render + marker contract (both wrapping and point shapes)
+- `2026-05-30-agent-mode-design.md` — prep + render + marker contract (both wrapping and point shapes)
 - `2026-05-30-answer-html-design.md` — browser view with hover preview + side pane
+- `2026-06-02-web-evidence-skill-design.md` — web-source grounding via deposited evidence files
+
+> **Historical note:** the `api-mode` branch retains a Mode A
+> (`groundling ask`) that called the Anthropic Messages API directly
+> with citations enabled. Main no longer ships it — the skill path is
+> the primary surface now.
 
 ## Limits
 
-- **No OCR.** Scanned PDFs without extractable text exit early
-  (`groundling ask` exit code 3). OCR externally first.
-- **No table-structure inference for prose linearization.** Mode A
-  uses PyMuPDF's reading order as-is; complex multi-column layouts
-  may produce garbled linearization, though cited bboxes remain
-  correct per-word. Mode B uses `find_tables()` for tighter
-  per-cell chunks (on by default; pass `--no-tables` to disable).
+- **No OCR.** Scanned PDFs without extractable text exit early. OCR
+  externally first.
+- **No table-structure inference for prose linearization.** Complex
+  multi-column layouts may produce garbled linearization, though
+  cited bboxes remain correct per-word. `find_tables()` is used for
+  tighter per-cell chunks (on by default; pass `--no-tables` to disable).
 - **No persistent project model.** Each invocation is a fresh,
   isolated run. Past runs accumulate under `qa-runs/`.
 
