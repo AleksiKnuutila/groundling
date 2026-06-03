@@ -145,14 +145,18 @@ def build_inline_answer_html(
                 host = ""
             # Build a Text Fragment URL so clicking the modal's outbound
             # link highlights the cited passage on the live page (parity
-            # with the run-dir path's cite_web.html.j2). The `host` label
-            # stays derived from the original URL — fragments shouldn't
-            # appear in the displayed hostname.
+            # with the run-dir path's cite_web.html.j2). We keep the raw
+            # URL in `url` for the link's visible text (the #:~:text=…
+            # tail is long and ugly), and put the augmented URL in
+            # `urlHighlight` for the anchor's href so the highlight
+            # still fires on click. The `host` label stays derived from
+            # the raw URL — fragments shouldn't appear in the hostname.
             fragment_url = build_text_fragment_url(
                 rec["url"], rec["marker_quote"],
             )
             entry.update({
-                "url": fragment_url,
+                "url": rec["url"],
+                "urlHighlight": fragment_url,
                 "host": host,
                 "title": rec.get("title", ""),
                 "fetchedAt": rec.get("fetched_at", ""),

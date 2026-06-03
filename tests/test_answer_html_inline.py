@@ -680,10 +680,10 @@ def test_inline_html_uncited_triggers_spotlight_button(tmp_path):
     assert 'id="weakBtn"' in html
 
 
-def test_inline_html_web_cite_url_carries_text_fragment():
-    """Web cites' url field should be the #:~:text=... augmented form so
-    the modal's outbound link highlights the cited passage on the live
-    page."""
+def test_inline_html_web_cite_url_split_raw_and_highlight():
+    """Web cites split the URL into a raw `url` (for display text) and
+    `urlHighlight` (#:~:text=… for the anchor's href). The modal shows
+    the readable URL but still navigates to the highlighted page."""
     records = [{
         'cite_id': 1, 'kind': 'web',
         'marker_quote': 'the cited passage',
@@ -699,9 +699,15 @@ def test_inline_html_web_cite_url_carries_text_fragment():
         cite_records=records,
         image_paths={}, image_dims={},
     )
-    # The url field in the cites JSON must include the text fragment.
-    assert '#:~:text=the%20cited%20passage' in html, html[:3000]
-    # The host label should remain the raw hostname (no fragment).
+    # Raw URL (no fragment) appears in the cites JSON's `url` field.
+    assert '"url":"https://example.com/article"' in html
+    # Augmented URL appears in `urlHighlight` so the modal anchor's
+    # href still triggers the browser's native text-fragment scroll.
+    assert (
+        '"urlHighlight":"https://example.com/article#:~:text='
+        'the%20cited%20passage"'
+    ) in html
+    # The host label stays the raw hostname (no fragment).
     assert '"host":"example.com"' in html
 
 

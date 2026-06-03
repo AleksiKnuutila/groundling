@@ -358,12 +358,16 @@
         class: 'excerpt', style: excerptStyle, html: cite.excerptHTML || '',
       }));
       const src = el('div', { class: 'd-src' });
-      const safe = safeUrl(cite.url);
-      if (safe) {
-        const link = el('a', { href: safe, target: '_blank', rel: 'noopener', text: safe });
+      // Visible link text is the raw URL (readable). The href uses the
+      // urlHighlight form (#:~:text=…) so clicking still scrolls to and
+      // highlights the cited passage on the live page.
+      const safeHref = safeUrl(cite.urlHighlight || cite.url);
+      const safeDisplay = safeUrl(cite.url) || cite.url || '';
+      if (safeHref) {
+        const link = el('a', { href: safeHref, target: '_blank', rel: 'noopener', text: safeDisplay });
         src.appendChild(link);
       } else {
-        src.appendChild(document.createTextNode(cite.url || ''));
+        src.appendChild(document.createTextNode(safeDisplay));
       }
       if (cite.fetchedAt) {
         src.appendChild(document.createTextNode(' · fetched ' + cite.fetchedAt));
