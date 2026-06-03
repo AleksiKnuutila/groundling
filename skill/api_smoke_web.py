@@ -9,10 +9,11 @@ Usage:
 Costs: ~30-60s of model time + a few web_search calls. Real money.
 
 Asserts the downloaded HTML contains:
-  - data-kind="web"
-  - class="preview preview-text"
-  - <mark>
-  - at least one href="http
+  - data-kind="web"          (web cite anchor attr)
+  - data-state="none"        (new template's default state — judge not run)
+  - GROUNDLING_CITES         (JSON cite registry injected by the new template)
+  - class="trustbar"         (sticky header strip — proves the new template ran)
+  - https://                 (web source URL flowed into the cite registry)
 
 If counters in the model's render output show missing_evidence > 0
 or invalid_quote_web > 0, the model failed to follow the deposit
@@ -203,12 +204,14 @@ def main():
     checks = [
         ('data-kind="web"',
          'data-kind="web"' in html),
-        ('class="preview preview-text"',
-         'class="preview preview-text"' in html),
-        ('<mark>',
-         '<mark>' in html),
-        ('href="http',
-         'href="http' in html),
+        ('data-state="none"',
+         'data-state="none"' in html),
+        ('GROUNDLING_CITES',
+         'GROUNDLING_CITES' in html),
+        ('class="trustbar"',
+         'class="trustbar"' in html),
+        ('https://',
+         'https://' in html),
     ]
     failed = 0
     for label, ok in checks:
